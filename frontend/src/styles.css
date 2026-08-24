@@ -1,0 +1,46 @@
+:root {
+  --bg: #0f1419;
+  --bg-elevated: #171e26;
+  --bg-panel: #1c2430;
+  --border: #2a3544;
+  --text: #e8eef5;
+  --text-muted: #8b9aab;
+  --accent: #3d9a7a;
+  --accent-hover: #4bb08c;
+  --danger: #d46565;
+  --warn: #d4a35c;
+  --radius: 10px;
+  --font: "DM Sans", system-ui, sans-serif;
+  --font-display: "Instrument Serif", Georgia, serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font);
+  background:
+    radial-gradient(ellipse 80% 50% at 10% -20%, #1a3d32 0%, transparent 50%),
+    radial-gradient(ellipse 60% 40% at 100% 0%, #1a2a40 0%, transparent 45%),
+    var(--bg);
+  color: var(--text);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: var(--accent);
+}
