@@ -12,20 +12,20 @@ cd "/path/to/AI Customer Support Platform"
 cp .env.example .env
 ```
 
-Defaults work for local demo. Optional Day 2 AI settings:
+Defaults work for local demo. Day 2 AI settings (Gemini only):
 
 ```bash
-OPENAI_API_KEY=                 # empty → hash embeddings + heuristic classifier
-EMBEDDING_MODEL=text-embedding-3-small
+GEMINI_API_KEY=                 # empty → heuristic classifier; set later for real Gemini
+LLM_MODEL=gemini-3.1-flash-lite
+EMBEDDING_MODEL=hash-local
 EMBEDDING_DIMENSIONS=1536
 CHUNK_SIZE_TOKENS=600
 CHUNK_OVERLAP_TOKENS=80
-LLM_MODEL=gpt-4o-mini
 KNOWLEDGE_TOP_K=5
 KNOWLEDGE_UPLOAD_DIR=/tmp/support-knowledge
 ```
 
-Change `SECRET_KEY` before any shared deployment.
+Do **not** commit API keys. Change `SECRET_KEY` before any shared deployment.
 
 ## 2. Start the stack
 
@@ -63,7 +63,8 @@ docker compose exec backend pytest -q \
   tests/test_chunk_embed.py \
   tests/test_ingestion_loaders.py \
   tests/test_search_and_classify.py \
-  tests/test_ai_graph.py
+  tests/test_ai_graph.py \
+  tests/test_gemini_provider.py
 ```
 
 ## 4. Log in
@@ -119,6 +120,8 @@ PY
 
 Expect `intent: ACCOUNT_ACCESS` and an `ai_run_id` (row in `ai_runs`). No auto-reply to customers.
 
+With `GEMINI_API_KEY` set, classification uses **Gemini 3.1 Flash Lite** (`gemini-3.1-flash-lite`) via `LLMProvider` / LangGraph / structured Pydantic output.
+
 ## 6. Day 1 acceptance walkthrough
 
 1. **Customers** → create a customer (copy UUID).  
@@ -153,6 +156,7 @@ npm run dev
 
 - **Knowledge stays PENDING**: ensure worker is running and consuming the `celery` queue (`docker compose logs worker`).  
 - **403 on knowledge**: `make seed` to refresh role permissions.  
-- **Empty/weak search scores without OpenAI**: expected with hash embeddings; set `OPENAI_API_KEY` for semantic retrieval.  
+- **Empty/weak search scores**: expected with hash-local embeddings until a Gemini embedding provider is added.  
+- **Classifier stays heuristic**: set `GEMINI_API_KEY` in `.env` and restart backend/worker.  
 - **PDF not found in worker**: backend + worker share `knowledge_uploads` volume at `/tmp/support-knowledge`.  
 - **Docker sock errors**: start the daemon, then `docker compose up --build`.

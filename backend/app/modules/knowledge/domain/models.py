@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.database.base import Base
 
-# Default embedding width for OpenAI text-embedding-3-small; keep in sync with settings.
+# Default embedding width for local hash vectors / future Gemini embeddings.
 EMBEDDING_DIMENSIONS = 1536
 
 

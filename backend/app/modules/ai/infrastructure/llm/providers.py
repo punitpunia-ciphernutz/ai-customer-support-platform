@@ -1,4 +1,4 @@
-"""LLM provider abstraction — one OpenAI impl + echo/heuristic fallback."""
+"""LLM provider abstraction — Gemini impl + echo/heuristic fallback."""
 
 from __future__ import annotations
 
@@ -6,12 +6,14 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any, TypeVar
 
-import httpx
 from pydantic import BaseModel
 
 from app.config import get_settings
 
 T = TypeVar("T", bound=BaseModel)
+
+# Stable Gemini API model id (Google AI for Developers, May 2026).
+DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 
 
 class LLMProvider(ABC):
@@ -74,51 +76,61 @@ class EchoLLMProvider(LLMProvider):
         yield await self.generate(prompt, **kwargs)
 
 
-class OpenAILLMProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini") -> None:
+class GeminiLLMProvider(LLMProvider):
+    """Google Gemini via the official `google-genai` SDK."""
+
+    def __init__(self, api_key: str, model: str = DEFAULT_GEMINI_MODEL) -> None:
         self.api_key = api_key
         self.model = model
-        self._url = "https://api.openai.com/v1/chat/completions"
+
+    def _client(self):  # type: ignore[no-untyped-def]
+        from google import genai
+
+        return genai.Client(api_key=self.api_key)
 
     async def generate(self, prompt: str, **kwargs: Any) -> str:
-        data = await self._chat([{"role": "user", "content": prompt}], response_format=None)
-        return data["choices"][0]["message"]["content"]
+        client = self._client()
+        response = await client.aio.models.generate_content(
+            model=self.model,
+            contents=prompt,
+        )
+        text = getattr(response, "text", None) or ""
+        if not text and getattr(response, "candidates", None):
+            # Fallback if .text helper is empty
+            parts = response.candidates[0].content.parts
+            text = "".join(getattr(p, "text", "") or "" for p in parts)
+        return text
 
     async def structured_output(self, prompt: str, schema: type[T], **kwargs: Any) -> T:
+        from google.genai import types
+
         system = (
             "You are a support intent classifier. "
             "Respond with JSON matching the provided schema only."
         )
-        schema_hint = schema.model_json_schema()
-        user = f"Schema:\n{json.dumps(schema_hint)}\n\nMessage to classify:\n{prompt}"
-        data = await self._chat(
-            [{"role": "system", "content": system}, {"role": "user", "content": user}],
-            response_format={"type": "json_object"},
+        client = self._client()
+        response = await client.aio.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system,
+                temperature=0,
+                response_mime_type="application/json",
+                response_json_schema=schema.model_json_schema(),
+            ),
         )
-        content = data["choices"][0]["message"]["content"]
-        parsed = json.loads(content)
-        return schema.model_validate(parsed)
+        text = getattr(response, "text", None) or ""
+        if not text:
+            raise ValueError("Gemini returned empty structured output")
+        return schema.model_validate(json.loads(text))
 
     async def stream(self, prompt: str, **kwargs: Any):
         # Day 2: non-streaming fallback
         yield await self.generate(prompt, **kwargs)
 
-    async def _chat(self, messages: list[dict[str, str]], response_format: dict | None) -> dict:
-        payload: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": 0}
-        if response_format:
-            payload["response_format"] = response_format
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                self._url,
-                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-                json=payload,
-            )
-            response.raise_for_status()
-            return response.json()
-
 
 def get_llm_provider() -> LLMProvider:
     settings = get_settings()
-    if settings.has_openai:
-        return OpenAILLMProvider(api_key=settings.openai_api_key, model=settings.llm_model)
+    if settings.has_gemini:
+        return GeminiLLMProvider(api_key=settings.gemini_api_key, model=settings.llm_model)
     return EchoLLMProvider()

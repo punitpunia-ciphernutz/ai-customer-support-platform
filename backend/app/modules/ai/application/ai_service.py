@@ -32,7 +32,7 @@ class AIService:
             message_id=message_id,
             type=AIRunType.CLASSIFICATION,
             status=AIRunStatus.RUNNING,
-            model=self.settings.llm_model if self.settings.has_openai else "echo-heuristic",
+            model=self.settings.llm_model if self.settings.has_gemini else "echo-heuristic",
             input={"message": message, "context": context or {}},
         )
         self.db.add(run)

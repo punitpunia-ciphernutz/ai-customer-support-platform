@@ -1,4 +1,8 @@
-"""Embedding provider abstraction + OpenAI / deterministic hash implementations."""
+"""Embedding provider abstraction + deterministic hash implementation.
+
+OpenAI embeddings removed — knowledge search uses local hash vectors until a
+Gemini (or other) embedding provider is wired behind this same interface.
+"""
 
 from __future__ import annotations
 
@@ -6,8 +10,6 @@ import hashlib
 import math
 import struct
 from abc import ABC, abstractmethod
-
-import httpx
 
 from app.config import get_settings
 from app.modules.knowledge.domain.models import EMBEDDING_DIMENSIONS
@@ -51,54 +53,6 @@ class HashEmbeddingProvider(EmbeddingProvider):
         return self._embed_one(text)
 
 
-class OpenAIEmbeddingProvider(EmbeddingProvider):
-    """OpenAI embeddings via HTTP (kept behind EmbeddingProvider; not called from routes)."""
-
-    def __init__(
-        self,
-        api_key: str,
-        model: str = "text-embedding-3-small",
-        dimensions: int = EMBEDDING_DIMENSIONS,
-    ) -> None:
-        self.api_key = api_key
-        self.model = model
-        self.dimensions = dimensions
-        self._url = "https://api.openai.com/v1/embeddings"
-
-    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        if not texts:
-            return []
-        return await self._embed(texts)
-
-    async def embed_query(self, text: str) -> list[float]:
-        vectors = await self._embed([text])
-        return vectors[0]
-
-    async def _embed(self, texts: list[str]) -> list[list[float]]:
-        payload: dict = {"model": self.model, "input": texts}
-        if self.model.startswith("text-embedding-3"):
-            payload["dimensions"] = self.dimensions
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                self._url,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()["data"]
-            data_sorted = sorted(data, key=lambda row: row["index"])
-            return [row["embedding"] for row in data_sorted]
-
-
 def get_embedding_provider() -> EmbeddingProvider:
     settings = get_settings()
-    if settings.has_openai:
-        return OpenAIEmbeddingProvider(
-            api_key=settings.openai_api_key,
-            model=settings.embedding_model,
-            dimensions=settings.embedding_dimensions,
-        )
     return HashEmbeddingProvider(dimensions=settings.embedding_dimensions)

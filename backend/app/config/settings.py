@@ -21,14 +21,14 @@ class Settings(BaseSettings):
     seed_agent_email: str = "agent@example.com"
     seed_agent_password: str = "agent123!"
 
-    # Knowledge / embeddings (Day 2)
-    openai_api_key: str = ""
-    embedding_model: str = "text-embedding-3-small"
+    # Knowledge / embeddings + Gemini LLM (Day 2)
+    gemini_api_key: str = ""
+    embedding_model: str = "hash-local"
     embedding_dimensions: int = 1536
     chunk_size_tokens: int = 600
     chunk_overlap_tokens: int = 80
     knowledge_top_k: int = 5
-    llm_model: str = "gpt-4o-mini"
+    llm_model: str = "gemini-3.1-flash-lite"
     knowledge_upload_dir: str = "/tmp/support-knowledge"
 
     @property
@@ -36,8 +36,8 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @property
-    def has_openai(self) -> bool:
-        return bool(self.openai_api_key.strip())
+    def has_gemini(self) -> bool:
+        return bool(self.gemini_api_key.strip())
 
 
 @lru_cache
