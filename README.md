@@ -20,6 +20,7 @@ Frontend: React · TypeScript · Vite · TanStack Query · React Hook Form · Zo
 
 ## Documentation
 
+- [Codebase map](docs/codebase-map.md) — folders/files and where to change what
 - [Day 1 implementation plan](docs/day1-implementation-plan.md)
 - [Day 2 implementation plan](docs/day2-implementation-plan.md)
 - [Day 1+2 final audit](docs/day1-day2-final-audit.md)
