@@ -45,20 +45,24 @@ class WebChatAdapter(ChannelAdapter):
 
     async def send(self, conversation_id: str, content: str, metadata: dict[str, Any] | None = None) -> None:
         # Delivery is via persisted Message + WebSocket fan-out.
+        _ = (conversation_id, content, metadata)
         return None
 
     async def normalize(self, raw: dict[str, Any]) -> IncomingMessage:
+        content = str(raw.get("content") or "").strip()
         return IncomingMessage(
             organization_id=str(raw["organization_id"]),
             channel=ChannelType.WEB_CHAT,
-            content=str(raw["content"]),
+            content=content,
             customer_id=raw.get("customer_id"),
             customer_email=raw.get("customer_email"),
             customer_name=raw.get("customer_name"),
-            metadata=raw.get("metadata") or {},
+            external_id=raw.get("external_id"),
+            metadata=dict(raw.get("metadata") or {}),
         )
 
     async def identify_customer(self, message: IncomingMessage) -> IncomingMessage:
+        # Day 1/2: customer already resolved by ID; future channels resolve by email/external_id.
         return message
 
 

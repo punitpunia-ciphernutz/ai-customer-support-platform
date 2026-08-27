@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     # Knowledge / embeddings + Gemini LLM (Day 2)
     gemini_api_key: str = ""
-    embedding_model: str = "hash-local"
+    embedding_model: str = "gemini-embedding-001"
     embedding_dimensions: int = 1536
     chunk_size_tokens: int = 600
     chunk_overlap_tokens: int = 80

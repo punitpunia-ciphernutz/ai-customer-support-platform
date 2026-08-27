@@ -33,6 +33,7 @@ export function WebChatPage() {
 
   useSupportSocket({
     token: null,
+    publicSocket: true,
     onEvent: (event) => {
       if (event.name === "message.created" && conversationId) {
         void loadMessages(conversationId, customerId);

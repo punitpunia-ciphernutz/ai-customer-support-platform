@@ -1,4 +1,4 @@
-"""pgvector similarity retriever behind a small interface."""
+"""pgvector similarity retriever — LangChain implementation behind Retriever ABC."""
 
 from __future__ import annotations
 
@@ -37,6 +37,13 @@ class Retriever(ABC):
 
 
 class PgVectorRetriever(Retriever):
+    """Org-scoped knowledge retriever.
+
+    Public API stays free of LangChain types. Internally delegates to
+    `LangChainPgVectorRetriever` for the LangChain DoD path, while
+    `search_pgvector` holds the SQLAlchemy/pgvector query used by that adapter.
+    """
+
     def __init__(
         self,
         db: AsyncSession,
@@ -55,8 +62,37 @@ class PgVectorRetriever(Retriever):
         self, query: str, *, organization_id: str, top_k: int | None = None
     ) -> list[RetrievalHit]:
         k = top_k or self.default_top_k
+        # LangChain retriever path (documents → RetrievalHit)
+        from app.modules.knowledge.infrastructure.langchain import LangChainPgVectorRetriever
+
+        lc = LangChainPgVectorRetriever(
+            db=self.db,
+            organization_id=organization_id,
+            embedding_provider=self.embedding_provider,
+            top_k=k,
+        )
+        docs = await lc._aget_relevant_documents(query)
+        hits: list[RetrievalHit] = []
+        for doc in docs:
+            meta = dict(doc.metadata or {})
+            hits.append(
+                RetrievalHit(
+                    chunk_id=str(meta.get("chunk_id") or ""),
+                    document_id=str(meta.get("document_id") or ""),
+                    title=str(meta.get("title") or ""),
+                    content=doc.page_content,
+                    score=float(meta.get("score") or 0.0),
+                    metadata={m: v for m, v in meta.items() if m not in {"chunk_id", "document_id", "title", "score"}},
+                )
+            )
+        return hits
+
+    async def search_pgvector(
+        self, query: str, *, organization_id: str, top_k: int | None = None
+    ) -> list[RetrievalHit]:
+        """Direct pgvector cosine search (used by the LangChain adapter)."""
+        k = top_k or self.default_top_k
         vector = await self.embedding_provider.embed_query(query)
-        # Prefer ORM cosine_distance ordering
         stmt = (
             select(
                 DocumentChunk.id,

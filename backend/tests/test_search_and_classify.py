@@ -11,7 +11,7 @@ from app.modules.ai.domain.schemas import IntentLabel
 from app.modules.ai.infrastructure.llm.providers import EchoLLMProvider
 from app.modules.knowledge.application.ingestion_service import IngestionService
 from app.modules.knowledge.domain.models import IngestionStatus, KnowledgeSource, KnowledgeSourceType
-from app.modules.knowledge.infrastructure.embeddings import HashEmbeddingProvider
+from app.modules.knowledge.infrastructure.embeddings import OfflineSemanticEmbeddingProvider
 from app.modules.knowledge.infrastructure.loaders import LoadedContent
 from app.modules.knowledge.infrastructure.vectorstore import PgVectorRetriever
 
@@ -29,13 +29,13 @@ async def test_retriever_returns_password_chunk() -> None:
         )
         session.add(source)
         await session.flush()
-        service = IngestionService(session, embedding_provider=HashEmbeddingProvider())
+        service = IngestionService(session, embedding_provider=OfflineSemanticEmbeddingProvider())
         doc = await service.create_pending_document(source=source, title="Password Reset", content="x")
         faq = "How do I reset my password? Use the Forgot Password link on the login page."
         await service.ingest_loaded_content(
             doc.id, LoadedContent(title="Password Reset", text=faq, metadata={"source_type": "TEXT"})
         )
-        hits = await PgVectorRetriever(session, embedding_provider=HashEmbeddingProvider()).search(
+        hits = await PgVectorRetriever(session, embedding_provider=OfflineSemanticEmbeddingProvider()).search(
             "How do I reset my password?",
             organization_id=org_id,
             top_k=3,

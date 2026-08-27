@@ -129,7 +129,22 @@ async def update_ticket(
                 payload={"ticket_id": ticket.id},
             )
         )
-    if ticket.status == TicketStatus.RESOLVED:
+    if ticket.status == TicketStatus.RESOLVED and old["status"] != TicketStatus.RESOLVED.value:
+        await write_audit(
+            db,
+            organization_id=user.organization_id,
+            actor_type=ActorType.USER,
+            actor_id=user.id,
+            action="ticket.resolved",
+            entity_type="ticket",
+            entity_id=ticket.id,
+            old_value=old,
+            new_value={
+                "status": ticket.status.value,
+                "assigned_user_id": ticket.assigned_user_id,
+                "priority": ticket.priority.value,
+            },
+        )
         await event_bus.publish(
             DomainEvent(
                 name="ticket.resolved",

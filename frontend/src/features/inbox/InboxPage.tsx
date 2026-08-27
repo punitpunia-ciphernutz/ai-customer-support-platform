@@ -29,6 +29,11 @@ export function InboxPage() {
     queryFn: () => api<User[]>("/users"),
   });
 
+  const teams = useQuery({
+    queryKey: ["teams"],
+    queryFn: () => api<{ id: string; name: string }[]>("/teams"),
+  });
+
   const messages = useQuery({
     queryKey: ["messages", selectedId],
     queryFn: () => api<Message[]>(`/conversations/${selectedId}/messages`),
@@ -130,8 +135,20 @@ export function InboxPage() {
                 </div>
                 <div className="actions">
                   <select
+                    value={selected.status}
+                    onChange={(e) => patchConversation.mutate({ status: e.target.value })}
+                    aria-label="Status"
+                  >
+                    {["OPEN", "PENDING", "CLOSED"].map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                  <select
                     value={selected.priority}
                     onChange={(e) => patchConversation.mutate({ priority: e.target.value })}
+                    aria-label="Priority"
                   >
                     {["LOW", "NORMAL", "HIGH", "URGENT"].map((p) => (
                       <option key={p} value={p}>
@@ -146,11 +163,28 @@ export function InboxPage() {
                         assigned_user_id: e.target.value || null,
                       })
                     }
+                    aria-label="Assignee"
                   >
                     <option value="">Unassigned</option>
                     {(users.data ?? (user ? [user] : [])).map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.full_name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={selected.assigned_team_id ?? ""}
+                    onChange={(e) =>
+                      patchConversation.mutate({
+                        assigned_team_id: e.target.value || null,
+                      })
+                    }
+                    aria-label="Team"
+                  >
+                    <option value="">No team</option>
+                    {(teams.data ?? []).map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
                       </option>
                     ))}
                   </select>

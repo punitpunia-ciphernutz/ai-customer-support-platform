@@ -7,7 +7,7 @@ from app.infrastructure.database.models import Organization
 from app.infrastructure.database.session import AsyncSessionLocal
 from app.modules.knowledge.application.ingestion_service import IngestionService
 from app.modules.knowledge.domain.models import DocumentChunk, IngestionStatus, KnowledgeSource, KnowledgeSourceType
-from app.modules.knowledge.infrastructure.embeddings import HashEmbeddingProvider
+from app.modules.knowledge.infrastructure.embeddings import OfflineSemanticEmbeddingProvider
 from app.modules.knowledge.infrastructure.loaders import LoadedContent, PDFLoader, TextLoader
 from app.modules.knowledge.infrastructure.parsers import content_hash, html_to_text, normalize_text
 
@@ -63,7 +63,7 @@ async def test_ingest_text_document_creates_chunks() -> None:
         session.add(source)
         await session.flush()
 
-        service = IngestionService(session, embedding_provider=HashEmbeddingProvider())
+        service = IngestionService(session, embedding_provider=OfflineSemanticEmbeddingProvider())
         document = await service.create_pending_document(
             source=source,
             title="Password Reset",

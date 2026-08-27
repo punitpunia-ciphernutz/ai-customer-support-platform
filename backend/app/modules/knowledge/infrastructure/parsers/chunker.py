@@ -1,4 +1,4 @@
-"""Token-oriented text chunking with configurable size and overlap."""
+"""Token-oriented text chunking — LangChain splitter behind Chunker interface."""
 
 from __future__ import annotations
 
@@ -22,7 +22,11 @@ class Chunker(ABC):
 
 
 class TokenChunker(Chunker):
-    """Approximate token chunking by whitespace tokens (configurable size/overlap)."""
+    """LangChain RecursiveCharacterTextSplitter with token-sized windows.
+
+    Uses whitespace token counts for size/overlap configuration (~500–800 tokens
+    with ~50–100 overlap), implemented via LangChain as the document-processing layer.
+    """
 
     def __init__(self, chunk_size: int = 600, chunk_overlap: int = 80) -> None:
         if chunk_size < 1:
@@ -34,32 +38,33 @@ class TokenChunker(Chunker):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
 
+    def _splitter(self):  # type: ignore[no-untyped-def]
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+        # Approximate tokens as whitespace-separated words via a custom length fn.
+        return RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
+            length_function=lambda text: len(text.split()),
+            separators=["\n\n", "\n", ". ", " ", ""],
+        )
+
     def chunk(self, text: str, *, metadata: dict[str, Any] | None = None) -> list[TextChunk]:
         base_meta = dict(metadata or {})
-        tokens = text.split()
-        if not tokens:
+        if not text.strip():
             return []
-
-        step = self.chunk_size - self.chunk_overlap
+        pieces = self._splitter().split_text(text)
         chunks: list[TextChunk] = []
-        start = 0
-        index = 0
-        while start < len(tokens):
-            end = min(start + self.chunk_size, len(tokens))
-            piece = tokens[start:end]
-            content = " ".join(piece)
+        for index, content in enumerate(pieces):
+            token_count = len(content.split())
             chunks.append(
                 TextChunk(
                     content=content,
                     index=index,
-                    token_count=len(piece),
+                    token_count=token_count,
                     metadata={**base_meta, "chunk_index": index},
                 )
             )
-            index += 1
-            if end >= len(tokens):
-                break
-            start += step
         return chunks
 
 

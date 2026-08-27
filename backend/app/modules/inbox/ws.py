@@ -15,19 +15,26 @@ router = APIRouter(tags=["websocket"])
 
 class ConnectionManager:
     def __init__(self) -> None:
-        self._connections: list[WebSocket] = []
+        self._agent_connections: list[WebSocket] = []
+        self._public_connections: list[WebSocket] = []
 
-    async def connect(self, websocket: WebSocket) -> None:
+    async def connect_agent(self, websocket: WebSocket) -> None:
         await websocket.accept()
-        self._connections.append(websocket)
+        self._agent_connections.append(websocket)
+
+    async def connect_public(self, websocket: WebSocket) -> None:
+        await websocket.accept()
+        self._public_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket) -> None:
-        if websocket in self._connections:
-            self._connections.remove(websocket)
+        if websocket in self._agent_connections:
+            self._agent_connections.remove(websocket)
+        if websocket in self._public_connections:
+            self._public_connections.remove(websocket)
 
     async def broadcast(self, message: dict[str, Any]) -> None:
         dead: list[WebSocket] = []
-        for ws in self._connections:
+        for ws in [*self._agent_connections, *self._public_connections]:
             try:
                 await ws.send_json(message)
             except Exception:
@@ -84,19 +91,32 @@ def ensure_listener_started() -> None:
 
 
 @router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, token: str | None = None) -> None:
+async def websocket_agent(websocket: WebSocket, token: str | None = None) -> None:
+    """Authenticated agent inbox socket — JWT required."""
     ensure_listener_started()
-    # Soft auth: if token provided, validate; otherwise allow for local demo (public chat poll)
-    if token:
-        try:
-            decode_access_token(token)
-        except ValueError:
-            await websocket.close(code=4401)
-            return
-    await manager.connect(websocket)
+    if not token:
+        await websocket.close(code=4401)
+        return
+    try:
+        decode_access_token(token)
+    except ValueError:
+        await websocket.close(code=4401)
+        return
+    await manager.connect_agent(websocket)
     try:
         while True:
-            # Keepalive / ignore client messages
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+
+@router.websocket("/ws/public")
+async def websocket_public(websocket: WebSocket) -> None:
+    """Unauthenticated customer web-chat socket (demo)."""
+    ensure_listener_started()
+    await manager.connect_public(websocket)
+    try:
+        while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
