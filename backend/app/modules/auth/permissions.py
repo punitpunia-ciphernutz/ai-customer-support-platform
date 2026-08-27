@@ -14,6 +14,8 @@ TEAMS_READ = "teams.read"
 TEAMS_WRITE = "teams.write"
 SETTINGS_READ = "settings.read"
 SETTINGS_WRITE = "settings.write"
+KNOWLEDGE_READ = "knowledge.read"
+KNOWLEDGE_WRITE = "knowledge.write"
 
 ALL_PERMISSIONS = [
     CUSTOMERS_READ,
@@ -29,6 +31,8 @@ ALL_PERMISSIONS = [
     TEAMS_WRITE,
     SETTINGS_READ,
     SETTINGS_WRITE,
+    KNOWLEDGE_READ,
+    KNOWLEDGE_WRITE,
 ]
 
 ROLE_PERMISSIONS: dict[RoleName, list[str]] = {
@@ -46,6 +50,8 @@ ROLE_PERMISSIONS: dict[RoleName, list[str]] = {
         TEAMS_READ,
         TEAMS_WRITE,
         SETTINGS_READ,
+        KNOWLEDGE_READ,
+        KNOWLEDGE_WRITE,
     ],
     RoleName.AGENT: [
         CUSTOMERS_READ,
@@ -57,6 +63,8 @@ ROLE_PERMISSIONS: dict[RoleName, list[str]] = {
         TICKETS_WRITE,
         USERS_READ,
         TEAMS_READ,
+        KNOWLEDGE_READ,
+        KNOWLEDGE_WRITE,
     ],
     RoleName.READ_ONLY: [
         CUSTOMERS_READ,
@@ -65,5 +73,6 @@ ROLE_PERMISSIONS: dict[RoleName, list[str]] = {
         USERS_READ,
         TEAMS_READ,
         SETTINGS_READ,
+        KNOWLEDGE_READ,
     ],
 }

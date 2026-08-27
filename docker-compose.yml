@@ -37,6 +37,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
+      KNOWLEDGE_UPLOAD_DIR: /tmp/support-knowledge
     ports:
       - "8000:8000"
     depends_on:
@@ -50,6 +51,7 @@ services:
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     volumes:
       - ./backend:/app
+      - knowledge_uploads:/tmp/support-knowledge
 
   worker:
     build:
@@ -62,6 +64,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
+      KNOWLEDGE_UPLOAD_DIR: /tmp/support-knowledge
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,6 +73,7 @@ services:
     command: celery -A app.workers.celery_app worker --loglevel=info
     volumes:
       - ./backend:/app
+      - knowledge_uploads:/tmp/support-knowledge
 
   frontend:
     build:
@@ -84,3 +88,4 @@ services:
 
 volumes:
   postgres_data:
+  knowledge_uploads:

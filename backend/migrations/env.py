@@ -4,7 +4,10 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.config import get_settings
-from app.infrastructure.database.models import Base
+from app.infrastructure.database.base import Base
+from app.infrastructure.database import models as _support_models  # noqa: F401
+from app.modules.knowledge.domain import models as _knowledge_models  # noqa: F401
+from app.modules.ai.domain import models as _ai_models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

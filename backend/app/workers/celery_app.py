@@ -8,9 +8,9 @@ celery_app = Celery(
     "support_platform",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
+    include=["app.workers.tasks"],
 )
-celery_app.conf.task_routes = {"app.workers.tasks.*": {"queue": "default"}}
-celery_app.autodiscover_tasks(["app.workers"])
+celery_app.conf.task_default_queue = "celery"
 
 
 @celery_app.task(name="app.workers.tasks.hello_world")

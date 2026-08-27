@@ -4,6 +4,7 @@ import { LoginPage } from "@/features/auth/LoginPage";
 import { InboxPage } from "@/features/inbox/InboxPage";
 import { CustomersPage } from "@/features/customers/CustomersPage";
 import { WebChatPage } from "@/features/conversations/WebChatPage";
+import { KnowledgePage, KnowledgeSourcePage } from "@/features/knowledge/KnowledgePage";
 import { AppShell } from "@/components/shared/AppShell";
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -26,6 +27,8 @@ export function App() {
               <Routes>
                 <Route path="/" element={<InboxPage />} />
                 <Route path="/customers" element={<CustomersPage />} />
+                <Route path="/knowledge" element={<KnowledgePage />} />
+                <Route path="/knowledge/:sourceId" element={<KnowledgeSourcePage />} />
               </Routes>
             </AppShell>
           </Protected>

@@ -1,42 +1,38 @@
 # Progress — AI Customer Support Platform
 
-Last updated: 2026-08-21
+Last updated: 2026-08-27
 
 ## Status summary
 
-Day 1 **Support Platform Core** is implemented in-repo through Phases A–P. Unit tests for health + minimal LangGraph pass locally. Full stack verification via `docker compose up` is **pending** (Docker daemon was not running in the implementation environment).
+Day 1 **Support Platform Core** is complete. Day 2 **Knowledge Base + AI Foundation** is complete (Flows A + B verified independently).
 
-## Completed
+## Day 1 — Completed
 
 | Phase | Work |
 |-------|------|
-| A | Monorepo layout (`backend/`, `frontend/`, Makefile, `.gitignore`, README) |
-| B | Docker Compose (postgres+pgvector, redis, backend, worker, frontend), `.env.example` |
-| C | FastAPI app, `/health`, `/api/v1/health`, CORS, config, logging, OpenAPI |
-| D | SQLAlchemy models, Alembic `0001_initial`, seed org/roles/agent/team |
-| E–F | JWT auth (login/logout/me), RBAC permissions + `require_permission` |
-| G–H | Teams/users list APIs, Customers CRUD + events/audit on update |
-| I–J | Conversations/messages, channel adapters (WebChat + stubs), Redis events, WebSocket |
-| K | Tickets CRUD + audit; conversation assign/close audit |
-| L | Celery worker + `hello_world` task |
-| M | AI interfaces, Echo LLM, minimal LangGraph (not wired to chat) |
-| N | Request/correlation IDs, structured logs, OTel TracerProvider foundation |
-| O | React inbox (3-pane), customers, web chat, WS client |
-| P | pytest health/AI/smoke tests, README |
+| A–P | Support Core (auth, org, customers, conversations, tickets, WS, Celery hello, AI placeholders, React inbox) |
 
-## Remaining
+## Day 2 — Completed
 
-- [x] Start Docker and run stack (`docker compose up`) — backend healthy after enum migration fix
-- [ ] Optional: walk full UI acceptance demo
-- [ ] Optional: `make test` smoke suite against live API
+| Phase | Work |
+|-------|------|
+| A | Knowledge module; Source/Document/Chunk; Alembic `0002_knowledge`; RBAC; source CRUD |
+| B | TokenChunker + EmbeddingProvider (OpenAI / hash fallback) |
+| C | TEXT / PDF / URL loaders; normalize; content_hash; IngestionService |
+| D | Celery `ingest_document`; 202 document APIs; shared upload volume |
+| E | PgVectorRetriever + `POST /api/v1/knowledge/search` |
+| F | LLMProvider; AIClassification; AIRun + Alembic `0003_ai_runs` |
+| G | AIService + LangGraph classification + `POST /api/v1/ai/classify` |
+| H | Knowledge UI (`/knowledge`, `/knowledge/:sourceId`) |
+| I | Tests (18 passing) + docs updates |
 
 ## Default credentials
 
 - Email: `agent@example.com`
 - Password: `agent123!`
 
-## Local verification already done
+## Verification notes
 
-- Backend import: `from app.main import app` OK
-- `pytest tests/test_health.py tests/test_ai_graph.py` — 2 passed
-- Frontend `tsc --noEmit` — OK
+- Without `OPENAI_API_KEY`, embeddings use deterministic hash vectors and classification uses keyword heuristics (still end-to-end).
+- Set `OPENAI_API_KEY` in `.env` for real embeddings / LLM structured output.
+- Celery must consume the default `celery` queue (fixed; do not route Day 2 tasks to a separate unused queue).

@@ -14,13 +14,31 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.infrastructure.database.base import Base
 
-class Base(DeclarativeBase):
-    type_annotation_map = {
-        dict[str, Any]: JSONB,
-    }
+__all__ = [
+    "ActorType",
+    "AuditLog",
+    "Base",
+    "ChannelType",
+    "Conversation",
+    "ConversationStatus",
+    "Customer",
+    "Message",
+    "Organization",
+    "Participant",
+    "Priority",
+    "Role",
+    "RoleName",
+    "SenderType",
+    "Team",
+    "TeamMember",
+    "Ticket",
+    "TicketStatus",
+    "User",
+]
 
 
 class RoleName(StrEnum):

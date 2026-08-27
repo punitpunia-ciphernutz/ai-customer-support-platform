@@ -20,6 +20,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             Customers
           </Link>
+          <Link
+            className={location.pathname.startsWith("/knowledge") ? "active" : ""}
+            to="/knowledge"
+          >
+            Knowledge
+          </Link>
           <a href="/chat" target="_blank" rel="noreferrer">
             Web Chat ↗
           </a>
