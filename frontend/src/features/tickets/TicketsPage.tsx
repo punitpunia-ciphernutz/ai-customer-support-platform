@@ -248,7 +248,9 @@ export function TicketsPage() {
                 <div><dt>Ticket ID</dt><dd><code>{selected.id}</code></dd></div>
                 <div>
                   <dt>Conversation</dt>
-                  <dd><Link to="/">Open in Inbox</Link></dd>
+                  <dd>
+                    <Link to={`/?c=${selected.conversation_id}`}>Open in Inbox</Link>
+                  </dd>
                 </div>
                 <div><dt>Created</dt><dd>{formatDate(selected.created_at)}</dd></div>
                 <div><dt>Resolved</dt><dd>{formatDate(selected.resolved_at)}</dd></div>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/services/api/client";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import type { Conversation, Customer, Message, UserListItem } from "@/types";
 import { useAuth } from "@/features/auth/AuthContext";
 import { useSupportSocket } from "@/hooks/useSupportSocket";
@@ -20,8 +20,10 @@ const VIEW_LABELS: Record<View, string> = {
 
 export function InboxPage() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkId = searchParams.get("c");
   const [view, setView] = useState<View>("all");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(deepLinkId);
   const [reply, setReply] = useState("");
   const [aiPanelOpen, setAiPanelOpen] = useState(true);
   const qc = useQueryClient();
@@ -30,6 +32,15 @@ export function InboxPage() {
     queryKey: ["conversations", view],
     queryFn: () => api<Conversation[]>(`/conversations?view=${view}`),
   });
+
+  useEffect(() => {
+    if (!deepLinkId) return;
+    setView("all");
+    setSelectedId(deepLinkId);
+    const next = new URLSearchParams(searchParams);
+    next.delete("c");
+    setSearchParams(next, { replace: true });
+  }, [deepLinkId]); // eslint-disable-line react-hooks/exhaustive-deps -- apply once per deep link
 
   const customers = useQuery({
     queryKey: ["customers"],
