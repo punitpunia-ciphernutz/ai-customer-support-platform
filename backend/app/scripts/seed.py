@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.infrastructure.database.models import Organization, Role, RoleName, Team, TeamMember, User
+from app.modules.ai.domain.models import AIConfig, AIMode
 from app.modules.auth.permissions import ROLE_PERMISSIONS
 from app.modules.auth.security import hash_password
 
@@ -54,6 +55,32 @@ def seed() -> None:
             session.add(team)
             session.flush()
             session.add(TeamMember(team_id=team.id, user_id=agent.id))
+
+        billing_team = session.scalar(
+            select(Team).where(Team.organization_id == org.id, Team.name == "Billing")
+        )
+        if billing_team is None:
+            billing_team = Team(organization_id=org.id, name="Billing", description="Billing support team")
+            session.add(billing_team)
+            session.flush()
+
+        ai_config = session.scalar(select(AIConfig).where(AIConfig.organization_id == org.id))
+        if ai_config is None:
+            session.add(
+                AIConfig(
+                    organization_id=org.id,
+                    enabled=True,
+                    mode=AIMode.AUTO_REPLY,
+                    auto_reply_threshold=0.85,
+                    escalation_threshold=0.85,
+                    restricted_intents=["OTHER"],
+                    intent_team_map={
+                        "BILLING": "Billing",
+                        "REFUND": "Billing",
+                        "CANCELLATION": "Billing",
+                    },
+                )
+            )
 
         session.commit()
         print(f"Seeded org={org.id} agent={settings.seed_agent_email}")

@@ -3,6 +3,15 @@ import { api } from "@/services/api/client";
 import type { Conversation, Message } from "@/types";
 import { useSupportSocket } from "@/hooks/useSupportSocket";
 
+function senderLabel(type: string) {
+  if (type === "AI") return "AI Support";
+  return type;
+}
+
+function isCustomerVisible(m: Message) {
+  return !m.metadata?.internal;
+}
+
 export function WebChatPage() {
   const [customerId, setCustomerId] = useState(
     () => localStorage.getItem("chat_customer_id") ?? ""
@@ -95,9 +104,9 @@ export function WebChatPage() {
         />
       </label>
       <div className="thread">
-        {messages.map((m) => (
+        {messages.filter(isCustomerVisible).map((m) => (
           <div key={m.id} className={`bubble ${m.sender_type.toLowerCase()}`}>
-            <div className="meta">{m.sender_type}</div>
+            <div className="meta">{senderLabel(m.sender_type)}</div>
             {m.content}
           </div>
         ))}
@@ -147,6 +156,7 @@ export function WebChatPage() {
         }
         .bubble { max-width: 80%; padding: 0.65rem 0.8rem; border-radius: 12px; background: var(--bg-panel); }
         .bubble.customer { margin-left: auto; background: #1f3d34; }
+        .bubble.ai { margin-right: auto; border: 1px solid #2d6a5a; background: #152a24; }
         .bubble.agent { margin-right: auto; }
         .meta { font-size: 0.7rem; color: var(--text-muted); }
         form { display: flex; gap: 0.5rem; }

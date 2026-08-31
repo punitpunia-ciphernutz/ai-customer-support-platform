@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     knowledge_top_k: int = 5
     llm_model: str = "gemini-3.1-flash-lite"
     knowledge_upload_dir: str = "/tmp/support-knowledge"
+    ai_retrieval_top_k: int = 10
+    ai_final_top_k: int = 5
+    ai_context_message_limit: int = 20
+    ai_min_retrieval_score: float = 0.35
+    support_agent_graph_version: str = "support-agent-v1"
 
     @property
     def cors_origin_list(self) -> list[str]:

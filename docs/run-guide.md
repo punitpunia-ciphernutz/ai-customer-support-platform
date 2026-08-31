@@ -12,16 +12,21 @@ cd "/path/to/AI Customer Support Platform"
 cp .env.example .env
 ```
 
-Defaults work for local demo. Day 2 AI settings (**Gemini only** — no OpenAI):
+Defaults work for local demo. AI settings (**Gemini optional**):
 
 ```bash
-GEMINI_API_KEY=                 # empty → offline lexical embeddings + heuristic classifier
+GEMINI_API_KEY=                 # empty → offline lexical embeddings + Echo/heuristic LLM
 LLM_MODEL=gemini-3.1-flash-lite
 EMBEDDING_MODEL=gemini-embedding-001
 EMBEDDING_DIMENSIONS=1536
 CHUNK_SIZE_TOKENS=600
 CHUNK_OVERLAP_TOKENS=80
 KNOWLEDGE_TOP_K=5
+AI_RETRIEVAL_TOP_K=10
+AI_FINAL_TOP_K=5
+AI_CONTEXT_MESSAGE_LIMIT=20
+AI_MIN_RETRIEVAL_SCORE=0.35
+SUPPORT_AGENT_GRAPH_VERSION=support-agent-v1
 KNOWLEDGE_UPLOAD_DIR=/tmp/support-knowledge
 ```
 
@@ -37,7 +42,7 @@ make up
 
 | Service | URL / port |
 |---------|------------|
-| Frontend (inbox + knowledge + chat) | http://localhost:5173 (Compose maps host `5173` → container `80`) |
+| Frontend (inbox + knowledge + chat) | http://localhost:5173 |
 | Backend API + docs | http://localhost:8000/docs |
 | Health | http://localhost:8000/health |
 | Agent WebSocket | `ws://localhost:8000/ws?token=<jwt>` |
@@ -45,7 +50,9 @@ make up
 | Postgres (pgvector) | localhost:5432 |
 | Redis | localhost:6379 |
 
-On backend start: `alembic upgrade head` (through `0003_ai_runs`) + seed (includes `knowledge.*` permissions).
+On backend start: `alembic upgrade head` (through `0004_day3_ai_agent`) + seed (org, roles, **Billing** team, **AI config**).
+
+**Important:** The **worker** service must be running for async AI replies (`process_ai_message` Celery task).
 
 ## 3. Migrate / seed / test
 
@@ -57,36 +64,95 @@ make logs
 make down
 ```
 
-Full suite:
+Full suite (in Docker):
 
 ```bash
 docker compose exec backend pytest -q
 ```
 
-Targeted Day 1/2 gap tests:
+Day 3 agent tests (17 tests — all spec scenarios + lifecycle + Celery event path):
+
+```bash
+docker compose exec backend pytest -q tests/test_day3_agent.py
+```
+
+Targeted Day 1/2 + Day 3:
 
 ```bash
 docker compose exec backend pytest -q \
   tests/test_semantic_search.py \
   tests/test_celery_ingest.py \
-  tests/test_channel_adapter.py \
-  tests/test_day1_day2_gaps.py \
-  tests/test_gemini_provider.py
+  tests/test_day3_agent.py \
+  tests/test_search_and_classify.py
 ```
+
+> **Note:** With `GEMINI_API_KEY` set in `.env`, `test_gemini_provider` fallback tests expect Gemini providers (not Echo/offline). Unset the key for fully offline test runs.
 
 ## 4. Log in
 
 1. Open http://localhost:5173/login  
 2. **agent@example.com** / **agent123!**  
-3. Inbox loads; use sidebar **Knowledge** for Day 2 UI  
-4. Spec alias routes `/app/knowledge` redirect to `/knowledge`
+3. Inbox loads; sidebar **Knowledge** for KB; **Web Chat** for customer demo  
+4. Inbox thread footer: **AI Support** toggle + mode (`Draft Only` / `Suggest` / `Auto Reply`)
 
-## 5. Day 2 demos
+## 5. Day 3 demos
 
-### Flow A — Knowledge
+### Flow A — AI resolve (password reset)
 
-1. UI: **Knowledge** → add a **TEXT** source → open it → paste FAQ text → wait for `COMPLETED`  
-   Or API:
+1. **Knowledge** → add TEXT source → paste **Password Reset Guide**:
+   ```
+   How do I reset my password? Go to Settings → Security → Reset Password.
+   ```
+2. Wait for document `COMPLETED` (worker ingests).
+3. **Customers** → create customer → copy UUID.
+4. **Web Chat** → paste customer ID → ask: *How do I reset my password?*
+5. Within a few seconds (Celery): AI Support reply appears via WebSocket.
+6. **Inbox** → open conversation → see AI bubble + **AI Information** panel (intent, confidence, knowledge).
+
+Or API quick test (no Celery):
+
+```bash
+docker compose exec -T backend python - <<'PY'
+import httpx
+base = "http://localhost:8000/api/v1"
+token = httpx.post(f"{base}/auth/login", json={"email":"agent@example.com","password":"agent123!"}).json()["access_token"]
+h = {"Authorization": f"Bearer {token}"}
+print(httpx.post(f"{base}/ai/test", headers=h, json={"message": "How do I reset my password?"}).json())
+PY
+```
+
+### Flow B — Escalation (billing)
+
+1. **Web Chat** as customer → *Can you change my company's billing plan?*
+2. AI escalates → ticket created (Billing team when seeded) → internal note in inbox (not visible in Web Chat).
+3. Customer sees short handoff message from AI Support.
+
+Verify AI runs:
+
+```bash
+docker compose exec -T backend python - <<'PY'
+import httpx
+base = "http://localhost:8000/api/v1"
+token = httpx.post(f"{base}/auth/login", json={"email":"agent@example.com","password":"agent123!"}).json()["access_token"]
+h = {"Authorization": f"Bearer {token}"}
+print(httpx.get(f"{base}/ai/runs", headers=h).json()[:3])
+PY
+```
+
+### AI configuration
+
+```bash
+# GET config
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/ai/config
+
+# Safe dev mode (no customer auto-replies)
+curl -s -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"mode":"DRAFT_ONLY"}' http://localhost:8000/api/v1/ai/config
+```
+
+## 6. Day 2 demos (still valid)
+
+### Knowledge search
 
 ```bash
 docker compose exec -T backend python - <<'PY'
@@ -108,38 +174,26 @@ print(httpx.post(f"{base}/knowledge/search", headers=h, json={"query":"How do I 
 PY
 ```
 
-Also supported: PDF upload (`POST .../documents/pdf`) and URL (`POST .../documents/url`) — one URL → one document.
-
-With `GEMINI_API_KEY` set, ingestion/search use **Gemini embeddings** (`gemini-embedding-001`). Without a key, offline lexical embeddings still rank overlapping vocabulary (good enough for local demos).
-
-### Flow B — AI classification
+### Classification only
 
 ```bash
 docker compose exec -T backend python - <<'PY'
 import httpx
 base = "http://localhost:8000/api/v1"
 token = httpx.post(f"{base}/auth/login", json={"email":"agent@example.com","password":"agent123!"}).json()["access_token"]
-r = httpx.post(
-    f"{base}/ai/classify",
-    headers={"Authorization": f"Bearer {token}"},
-    json={"message": "I cannot log into my account"},
-)
+r = httpx.post(f"{base}/ai/classify", headers={"Authorization": f"Bearer {token}"},
+               json={"message": "I cannot log into my account"})
 print(r.status_code, r.json())
 PY
 ```
 
-Expect `intent: ACCOUNT_ACCESS` and an `ai_run_id` (row in `ai_runs`). No auto-reply to customers.
+## 7. Day 1 acceptance walkthrough
 
-With `GEMINI_API_KEY` set, classification uses **Gemini 3.1 Flash Lite** (`gemini-3.1-flash-lite`) via `LLMProvider` / LangGraph / structured Pydantic output.
+1. **Customers** → create customer.  
+2. **Web Chat** → send message.  
+3. **Inbox** → reply, assign, close.  
 
-## 6. Day 1 acceptance walkthrough
-
-1. **Customers** → create a customer (copy UUID).  
-2. **Web Chat** → paste customer ID → send a message.  
-3. **Inbox** → reply, assign (user/team), set status/priority, close.  
-4. Confirm audit rows for assign/close (DB `audit_logs`).
-
-## 7. Non-Docker (optional)
+## 8. Non-Docker (optional)
 
 **Backend:**
 
@@ -163,12 +217,12 @@ npm install
 npm run dev
 ```
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
-- **Knowledge stays PENDING**: ensure worker is running and consuming the `celery` queue (`docker compose logs worker`).  
-- **403 on knowledge**: `make seed` to refresh role permissions.  
-- **Weak search without API key**: expected with offline lexical embeddings; set `GEMINI_API_KEY` for Gemini embeddings.  
-- **Classifier stays heuristic**: set `GEMINI_API_KEY` in `.env` and restart backend/worker.  
-- **PDF not found in worker**: backend + worker share `knowledge_uploads` volume at `/tmp/support-knowledge`.  
-- **Agent WS closes immediately**: agent inbox needs `ws://…/ws?token=<jwt>`; web chat uses `/ws/public`.  
-- **Docker sock errors**: start the daemon, then `docker compose up --build`.
+- **No AI reply in Web Chat**: ensure **worker** is running (`docker compose logs worker`); check `ai_configs.enabled` and `mode=AUTO_REPLY`.  
+- **Duplicate AI replies**: idempotency via `processing_key` and `metadata.trigger_message_id`; FAILED Celery retries reuse the same `AIRun` row instead of creating duplicates.  
+- **Knowledge stays PENDING**: worker not consuming `celery` queue.  
+- **403 on `/ai/*`**: run `make seed` to refresh `ai.read` / `ai.write` permissions.  
+- **Weak search without API key**: expected with offline lexical embeddings; set `GEMINI_API_KEY` for Gemini.  
+- **Agent WS closes**: use `ws://…/ws?token=<jwt>`; web chat uses `/ws/public`.  
+- **Internal escalation notes in inbox only**: public chat filters `metadata.internal=true` messages.

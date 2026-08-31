@@ -22,6 +22,7 @@ from app.infrastructure.database.models import (
     User,
 )
 from app.infrastructure.events import DomainEvent, event_bus
+from app.modules.ai.tasks_bridge import enqueue_ai_message_processing
 from app.modules.auth.permissions import CONVERSATIONS_ASSIGN
 from app.modules.conversations.channels import IncomingMessage, get_adapter
 from app.modules.conversations.schemas import ConversationCreate, ConversationUpdate, MessageCreate
@@ -52,6 +53,15 @@ class ConversationService:
                 Conversation.id == conversation_id,
                 Conversation.organization_id == organization_id,
             )
+        )
+        conversation = result.scalar_one_or_none()
+        if conversation is None:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        return conversation
+
+    async def get_conversation_by_id(self, conversation_id: str) -> Conversation:
+        result = await self.db.execute(
+            select(Conversation).where(Conversation.id == conversation_id)
         )
         conversation = result.scalar_one_or_none()
         if conversation is None:
@@ -270,7 +280,11 @@ class ConversationService:
             .where(Message.conversation_id == conversation_id)
             .order_by(Message.created_at.asc())
         )
-        return list(msgs.scalars().all())
+        return [
+            m
+            for m in msgs.scalars().all()
+            if not (m.metadata_ or {}).get("internal")
+        ]
 
     async def _create_from_incoming(
         self,
@@ -347,3 +361,4 @@ class ConversationService:
                 },
             )
         )
+        enqueue_ai_message_processing(msg.id, msg.sender_type.value)

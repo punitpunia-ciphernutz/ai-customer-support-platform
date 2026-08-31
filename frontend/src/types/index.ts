@@ -40,4 +40,21 @@ export type Message = {
   sender_id: string | null;
   content: string;
   created_at: string;
+  metadata?: {
+    ai_run_id?: string;
+    confidence?: number;
+    intent?: string;
+    grounded?: boolean;
+    citations?: { document_id: string; title: string }[];
+    ai_status?: string;
+    internal?: boolean;
+    ai_escalation?: boolean;
+  };
+};
+
+export type AIConfig = {
+  enabled: boolean;
+  mode: "DRAFT_ONLY" | "SUGGEST" | "AUTO_REPLY";
+  auto_reply_threshold: number;
+  escalation_threshold: number;
 };

@@ -1,34 +1,39 @@
 # Progress — AI Customer Support Platform
 
-Last updated: 2026-08-27
+Last updated: 2026-08-31
 
 ## Status summary
 
-**Day 1 and Day 2 are complete.** Support Core + Knowledge/AI foundations are in place, including Gemini embeddings, LangChain behind knowledge interfaces, `ConversationService` + ChannelAdapter wiring, inbox/audit/observability fixes, and expanded tests.
+**Day 1, Day 2, and Day 3 are complete.** The platform now runs a full async AI support agent: customer messages trigger Celery → LangGraph → knowledge retrieval → grounded answers or human escalation with tickets.
 
-LLM: **Google Gemini** (`gemini-3.1-flash-lite`).  
-Embeddings: **Gemini** (`gemini-embedding-001`, 1536-d) when `GEMINI_API_KEY` is set; otherwise offline lexical (bag-of-words) embeddings for local demos/tests.
+LLM: **Google Gemini** (`gemini-3.1-flash-lite`) when `GEMINI_API_KEY` is set; otherwise **Echo/heuristic** classifier + offline lexical embeddings for local demos/tests.
 
 ## Day 1 — Completed
 
 | Phase | Work |
 |-------|------|
-| A–P | Support Core (auth, org, customers, conversations, tickets, WS, Celery hello, AI placeholders, React inbox) |
-| Hardening | `ConversationService`; ChannelAdapter on create/message path; inbox status/team assign; audit `ticket.resolved`; request-id logging + FastAPI OTel instrumentation; agent `/ws` requires JWT, public `/ws/public` |
+| A–P | Support Core (auth, org, customers, conversations, tickets, WS, Celery, React inbox) |
+| Hardening | `ConversationService`; ChannelAdapter; inbox assign/close; audit; OTel |
 
 ## Day 2 — Completed
 
 | Phase | Work |
 |-------|------|
-| A | Knowledge module; Source/Document/Chunk; Alembic `0002_knowledge`; RBAC; source CRUD |
-| B | TokenChunker (LangChain splitter) + EmbeddingProvider (**Gemini** / offline lexical) |
-| C | TEXT / PDF / URL loaders; normalize; content_hash; IngestionService |
-| D | Celery `ingest_document`; 202 document APIs; shared upload volume |
-| E | PgVectorRetriever via **LangChain** `BaseRetriever` + `POST /api/v1/knowledge/search` |
-| F | `LLMProvider` + **Gemini**; AIClassification; AIRun + `0003_ai_runs` |
-| G | AIService + LangGraph classification + `POST /api/v1/ai/classify` |
-| H | Knowledge UI (`/knowledge`, `/app/knowledge` redirect) |
-| I | Tests (semantic multi-doc, Celery ingest, WS/audit/RBAC, ChannelAdapter, no-auto-reply) |
+| A–I | Knowledge module, ingestion, pgvector search, classification graph, Knowledge UI, tests |
+
+## Day 3 — Completed
+
+| Phase | Work |
+|-------|------|
+| 1 | Extended `AIRun` + `ai_configs` migration (`0004_day3_ai_agent`); `SupportAgentState`, `AIResponse`, API DTOs |
+| 2 | `ContextBuilder` — recent history + customer context |
+| 3–7 | LangGraph Support Agent: intent, retrieval, rerank, grounded generation, confidence, decision |
+| 8 | Idempotency via `processing_key` + `trigger_message_id`; lifecycle `PENDING` → `RUNNING` → `COMPLETED`/`FAILED`; FAILED retries reuse same run |
+| 9 | Celery `process_ai_message` + `message.created` → async enqueue |
+| 10–11 | AI replies via WebSocket; escalation → ticket + internal note + customer handoff |
+| 12 | APIs: `POST /ai/test`, `GET /ai/runs`, `GET/PATCH /ai/config` |
+| 13 | React: AI bubbles (Web Chat + Inbox), agent AI diagnostics panel, AI toggle/mode |
+| 14 | `tests/test_day3_agent.py` — **17 tests** (all 6 spec scenarios, lifecycle, idempotency, Celery→WS event) |
 
 ## Default credentials
 
@@ -37,8 +42,11 @@ Embeddings: **Gemini** (`gemini-embedding-001`, 1536-d) when `GEMINI_API_KEY` is
 
 ## Verification notes
 
-- Without `GEMINI_API_KEY`: classification uses echo/heuristic; embeddings use offline lexical vectors (token-overlap semantic enough for demos/tests).
-- With `GEMINI_API_KEY`: Gemini embeddings + structured classification (`EMBEDDING_MODEL=gemini-embedding-001`, `LLM_MODEL=gemini-3.1-flash-lite`).
-- OpenAI is not used for LLM or embeddings.
-- Celery must consume the default `celery` queue.
+- **AI mode** defaults to `AUTO_REPLY` (seed). Use Inbox AI settings or `PATCH /ai/config` for `DRAFT_ONLY` during safe testing.
+- Celery worker must run for async AI replies from Web Chat (`docker compose up worker`).
+- Customer public chat hides `metadata.internal` messages (escalation notes).
+- Without `GEMINI_API_KEY`: Echo LLM + offline embeddings (sufficient for demos/tests).
+- With `GEMINI_API_KEY`: Gemini embeddings + structured LLM output.
+- **Day 3 audit:** [`docs/day3-audit.md`](day3-audit.md) — all 24 requirements complete.
 - Audit detail: [`docs/day1-day2-final-audit.md`](day1-day2-final-audit.md)
+- Day 3 plan: [`docs/day3-implementation-plan.md`](day3-implementation-plan.md)

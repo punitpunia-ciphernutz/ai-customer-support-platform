@@ -37,15 +37,20 @@ class EchoLLMProvider(LLMProvider):
         return f"[echo-llm] {prompt}"
 
     async def structured_output(self, prompt: str, schema: type[T], **kwargs: Any) -> T:
-        from app.modules.ai.domain.schemas import AIClassification, IntentLabel
+        from app.modules.ai.domain.schemas import AIClassification, GeneratedAnswer, IntentLabel
+        from app.modules.ai.infrastructure.reranker import RelevanceScore
 
         if schema is AIClassification:
             lower = prompt.lower()
             intent = IntentLabel.OTHER
             requires_human = False
-            if any(w in lower for w in ("login", "password", "account", "access", "sign in")):
+            language = "es" if any(w in lower for w in ("cómo", "contraseña", "restablecer")) else "en"
+            if any(w in lower for w in ("human", "representative", "real person", "speak to")):
+                intent = IntentLabel.OTHER
+                requires_human = True
+            elif any(w in lower for w in ("login", "password", "account", "access", "sign in", "contraseña")):
                 intent = IntentLabel.ACCOUNT_ACCESS
-            elif any(w in lower for w in ("bill", "invoice", "charge", "payment")):
+            elif any(w in lower for w in ("bill", "invoice", "charge", "payment", "billing plan")):
                 intent = IntentLabel.BILLING
             elif any(w in lower for w in ("bug", "crash", "error", "broken")):
                 intent = IntentLabel.BUG_REPORT
@@ -59,17 +64,82 @@ class EchoLLMProvider(LLMProvider):
                 intent = IntentLabel.FEATURE_REQUEST
             elif any(w in lower for w in ("how", "what", "where", "?")):
                 intent = IntentLabel.GENERAL_QUESTION
-            elif any(w in lower for w in ("not work", "issue", "problem", "technical")):
+            elif any(w in lower for w in ("not work", "isn't working", "issue", "problem", "technical")):
                 intent = IntentLabel.TECHNICAL_ISSUE
+            elif "integrat" in lower and "xyz" in lower:
+                intent = IntentLabel.GENERAL_QUESTION
             return schema.model_validate(
                 {
                     "intent": intent,
-                    "language": "en",
+                    "language": language,
                     "sentiment": "frustrated" if "cannot" in lower or "can't" in lower else "neutral",
-                    "confidence": 0.86,
+                    "confidence": 0.94 if intent != IntentLabel.OTHER else 0.72,
                     "requires_human": requires_human,
                 }
             )
+
+        if schema is GeneratedAnswer:
+            lower = prompt.lower()
+            if any(w in lower for w in ("human", "representative", "real person")):
+                return schema.model_validate(
+                    {
+                        "answer": "I'll connect you with a human agent who can help.",
+                        "grounded": False,
+                        "needs_clarification": False,
+                    }
+                )
+            if "isn't working" in lower or "it isn't working" in lower:
+                return schema.model_validate(
+                    {
+                        "answer": "I'm sorry you're having trouble. Could you share more details about what isn't working?",
+                        "grounded": False,
+                        "needs_clarification": True,
+                    }
+                )
+            if "billing plan" in lower or "change my billing" in lower:
+                return schema.model_validate(
+                    {
+                        "answer": "I don't have enough information to change billing plans on your behalf.",
+                        "grounded": False,
+                        "needs_clarification": False,
+                    }
+                )
+            if "integrat" in lower and "xyz" in lower:
+                return schema.model_validate(
+                    {
+                        "answer": "I don't have documentation about an XYZ integration in our knowledge base.",
+                        "grounded": False,
+                        "needs_clarification": False,
+                    }
+                )
+            if any(w in lower for w in ("password", "reset", "contraseña", "restablecer")):
+                answer = (
+                    "Puede restablecer su contraseña desde Configuración → Seguridad → Restablecer contraseña."
+                    if "contraseña" in lower or "restablecer" in lower
+                    else "You can reset your password from Settings → Security → Reset Password."
+                )
+                return schema.model_validate(
+                    {"answer": answer, "grounded": True, "needs_clarification": False}
+                )
+            return schema.model_validate(
+                {
+                    "answer": "I don't have enough information in our knowledge base to answer that confidently.",
+                    "grounded": False,
+                    "needs_clarification": True,
+                }
+            )
+
+        if schema is RelevanceScore:
+            lower = prompt.lower()
+            score = 0.25
+            if "password" in lower and ("reset" in lower or "forgot" in lower):
+                score = 0.95
+            elif "billing" in lower or "plan" in lower:
+                score = 0.2
+            elif "xyz" in lower:
+                score = 0.1
+            return schema.model_validate({"relevance": score})
+
         raise NotImplementedError(f"EchoLLMProvider has no heuristic for {schema}")
 
     async def stream(self, prompt: str, **kwargs: Any):

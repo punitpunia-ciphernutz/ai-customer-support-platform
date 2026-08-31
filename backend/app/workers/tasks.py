@@ -68,3 +68,22 @@ async def _run_ingest(document_id: str) -> str:
 @celery_app.task(name="app.workers.tasks.ingest_document", bind=True, max_retries=1)
 def ingest_document(self, document_id: str) -> str:  # type: ignore[no-untyped-def]
     return asyncio.run(_run_ingest(document_id))
+
+
+async def _run_process_ai_message(message_id: str) -> str:
+    async with AsyncSessionLocal() as session:
+        from app.modules.ai.application.ai_service import AIService
+
+        try:
+            run = await AIService(session).process_customer_message(message_id)
+            await session.commit()
+            return run.id if run else "skipped"
+        except Exception:
+            await session.commit()
+            logger.exception("AI processing failed for message %s", message_id)
+            raise
+
+
+@celery_app.task(name="app.workers.tasks.process_ai_message", bind=True, max_retries=1)
+def process_ai_message(self, message_id: str) -> str:  # type: ignore[no-untyped-def]
+    return asyncio.run(_run_process_ai_message(message_id))
