@@ -1,4 +1,27 @@
-export type Role = { id: string; name: string; permissions: string[] };
+// Enums — must match backend exactly
+export type RoleName = "OWNER" | "ADMIN" | "MANAGER" | "AGENT" | "READ_ONLY";
+export type ChannelType = "WEB_CHAT" | "EMAIL" | "FORM";
+export type ConversationStatus = "OPEN" | "PENDING" | "CLOSED";
+export type Priority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
+export type SenderType = "CUSTOMER" | "AGENT" | "AI" | "SYSTEM";
+export type TicketStatus = "OPEN" | "IN_PROGRESS" | "WAITING" | "RESOLVED" | "CLOSED";
+export type AIMode = "DRAFT_ONLY" | "SUGGEST" | "AUTO_REPLY";
+export type IntentLabel =
+  | "GENERAL_QUESTION"
+  | "ACCOUNT_ACCESS"
+  | "BILLING"
+  | "TECHNICAL_ISSUE"
+  | "BUG_REPORT"
+  | "FEATURE_REQUEST"
+  | "REFUND"
+  | "CANCELLATION"
+  | "OTHER";
+export type AIRunType = "CLASSIFICATION" | "GENERATION" | "SUMMARY" | "RETRIEVAL" | "AGENT";
+export type AIRunStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "COMPLETED" | "FAILED";
+export type AgentDecision = "AI_RESOLVE" | "ESCALATE";
+
+export type Role = { id: string; name: RoleName; permissions: string[] };
+
 export type User = {
   id: string;
   organization_id: string;
@@ -6,6 +29,21 @@ export type User = {
   full_name: string;
   is_active: boolean;
   role: Role;
+  created_at: string;
+};
+
+export type UserListItem = {
+  id: string;
+  email: string;
+  full_name: string;
+  is_active: boolean;
+};
+
+export type Team = {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string | null;
   created_at: string;
 };
 
@@ -23,9 +61,9 @@ export type Conversation = {
   id: string;
   organization_id: string;
   customer_id: string;
-  channel: string;
-  status: string;
-  priority: string;
+  channel: ChannelType;
+  status: ConversationStatus;
+  priority: Priority;
   assigned_user_id: string | null;
   assigned_team_id: string | null;
   subject: string | null;
@@ -36,25 +74,99 @@ export type Conversation = {
 export type Message = {
   id: string;
   conversation_id: string;
-  sender_type: string;
+  sender_type: SenderType;
   sender_id: string | null;
   content: string;
   created_at: string;
   metadata?: {
     ai_run_id?: string;
+    trigger_message_id?: string;
     confidence?: number;
     intent?: string;
     grounded?: boolean;
-    citations?: { document_id: string; title: string }[];
+    citations?: { document_id: string; title: string; chunk_id?: string }[];
     ai_status?: string;
     internal?: boolean;
     ai_escalation?: boolean;
+    escalation?: boolean;
+    ticket_id?: string;
   };
+};
+
+export type Ticket = {
+  id: string;
+  organization_id: string;
+  conversation_id: string;
+  status: TicketStatus;
+  priority: Priority;
+  assigned_user_id: string | null;
+  assigned_team_id: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  closed_at: string | null;
 };
 
 export type AIConfig = {
   enabled: boolean;
-  mode: "DRAFT_ONLY" | "SUGGEST" | "AUTO_REPLY";
+  mode: AIMode;
   auto_reply_threshold: number;
   escalation_threshold: number;
+  allowed_intents: string[] | null;
+  restricted_intents: string[] | null;
+  intent_team_map: Record<string, string> | null;
 };
+
+export type AIRunSummary = {
+  id: string;
+  conversation_id: string | null;
+  message_id: string | null;
+  type: AIRunType;
+  status: AIRunStatus;
+  model: string | null;
+  graph_version: string | null;
+  intent: string | null;
+  retrieval_count: number | null;
+  confidence: number | null;
+  latency_ms: number | null;
+  error: string | null;
+  created_at: string;
+};
+
+export type AIRunDetail = AIRunSummary & {
+  input: Record<string, unknown>;
+  output: Record<string, unknown> | null;
+  token_usage: Record<string, unknown> | null;
+};
+
+export type AITestResponse = {
+  intent: IntentLabel;
+  confidence: number;
+  grounded: boolean;
+  answer: string;
+  sources: { document_id: string; title: string; chunk_id?: string }[];
+  escalation_required: boolean;
+  escalation_reason: string | null;
+  decision: AgentDecision;
+};
+
+export const INTENT_LABELS: IntentLabel[] = [
+  "GENERAL_QUESTION",
+  "ACCOUNT_ACCESS",
+  "BILLING",
+  "TECHNICAL_ISSUE",
+  "BUG_REPORT",
+  "FEATURE_REQUEST",
+  "REFUND",
+  "CANCELLATION",
+  "OTHER",
+];
+
+export const TICKET_STATUSES: TicketStatus[] = [
+  "OPEN",
+  "IN_PROGRESS",
+  "WAITING",
+  "RESOLVED",
+  "CLOSED",
+];
+
+export const PRIORITIES: Priority[] = ["LOW", "NORMAL", "HIGH", "URGENT"];

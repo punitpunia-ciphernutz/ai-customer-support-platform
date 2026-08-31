@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/services/api/client";
+import { api, ApiError } from "@/services/api/client";
 import type { Conversation, Message } from "@/types";
 import { useSupportSocket } from "@/hooks/useSupportSocket";
+import { Alert } from "@/components/ui";
+import { IconSupport } from "@/components/ui/icons";
+import { cn } from "@/utils/cn";
 
 function senderLabel(type: string) {
   if (type === "AI") return "AI Support";
@@ -22,6 +25,7 @@ export function WebChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const loadMessages = async (cid: string, custId: string) => {
@@ -34,9 +38,10 @@ export function WebChatPage() {
 
   useEffect(() => {
     if (conversationId && customerId) {
-      void loadMessages(conversationId, customerId).catch((e) =>
-        setError(e instanceof Error ? e.message : "Failed to load")
-      );
+      setLoading(true);
+      void loadMessages(conversationId, customerId)
+        .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
+        .finally(() => setLoading(false));
     }
   }, [conversationId, customerId]);
 
@@ -85,50 +90,75 @@ export function WebChatPage() {
       setText("");
       await loadMessages(cid, customerId);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Send failed");
+      setError(e instanceof ApiError ? e.message : "Send failed");
     }
   };
 
   return (
-    <div className="chat">
-      <header>
-        <h1>Web Chat</h1>
-        <p>Paste a customer ID from the agent Customers page, then send a message.</p>
+    <div className="chat-page">
+      <header className="chat-header">
+        <h1>
+          <IconSupport size={22} />
+          Web Chat
+        </h1>
+        <p className="page-desc" style={{ margin: "0.375rem 0 0" }}>
+          Paste a customer ID from the agent Customers page, then send a message.
+        </p>
       </header>
-      <label>
-        Customer ID
+
+      <div className="form-field">
+        <label className="form-label" htmlFor="customer-id">Customer ID</label>
         <input
+          id="customer-id"
+          className="form-input"
           value={customerId}
           onChange={(e) => setCustomerId(e.target.value)}
-          placeholder="UUID from Customers"
+          placeholder="UUID from Customers page"
         />
-      </label>
-      <div className="thread">
+      </div>
+
+      <div className="chat-thread">
+        {loading && (
+          <p className="text-muted text-sm" style={{ textAlign: "center" }}>Loading messages…</p>
+        )}
+        {!loading && !messages.filter(isCustomerVisible).length && (
+          <p className="text-muted text-sm" style={{ textAlign: "center", margin: "auto" }}>
+            Send a message to start the conversation.
+          </p>
+        )}
         {messages.filter(isCustomerVisible).map((m) => (
-          <div key={m.id} className={`bubble ${m.sender_type.toLowerCase()}`}>
-            <div className="meta">{senderLabel(m.sender_type)}</div>
+          <div key={m.id} className={cn("message-bubble", m.sender_type.toLowerCase())}>
+            <div className="message-sender">{senderLabel(m.sender_type)}</div>
             {m.content}
           </div>
         ))}
         <div ref={bottomRef} />
       </div>
-      {error && <p className="error">{error}</p>}
+
+      {error && <Alert type="error">{error}</Alert>}
+
       <form
+        className="flex gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           void startOrSend();
         }}
       >
         <input
+          className="form-input"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Hello, I need help."
+          placeholder="Hello, I need help…"
         />
-        <button type="submit">Send</button>
+        <button type="submit" className="btn btn-primary" disabled={!text.trim() || !customerId.trim()}>
+          Send
+        </button>
       </form>
+
       <button
         type="button"
-        className="reset"
+        className="btn btn-ghost btn-sm"
+        style={{ alignSelf: "center" }}
         onClick={() => {
           setConversationId("");
           localStorage.removeItem("chat_conversation_id");
@@ -137,36 +167,6 @@ export function WebChatPage() {
       >
         Start new conversation
       </button>
-      <style>{`
-        .chat {
-          max-width: 560px; margin: 0 auto; min-height: 100%;
-          padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem;
-        }
-        h1 { font-family: var(--font-display); margin: 0; color: var(--accent); font-weight: 400; }
-        header p { color: var(--text-muted); margin: 0.35rem 0 0; }
-        label { display: grid; gap: 0.35rem; font-size: 0.85rem; color: var(--text-muted); }
-        input, button {
-          background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text);
-          border-radius: 8px; padding: 0.65rem 0.75rem;
-        }
-        .thread {
-          flex: 1; min-height: 280px; background: var(--bg-elevated);
-          border: 1px solid var(--border); border-radius: 12px; padding: 1rem;
-          display: grid; gap: 0.65rem; align-content: start; overflow: auto;
-        }
-        .bubble { max-width: 80%; padding: 0.65rem 0.8rem; border-radius: 12px; background: var(--bg-panel); }
-        .bubble.customer { margin-left: auto; background: #1f3d34; }
-        .bubble.ai { margin-right: auto; border: 1px solid #2d6a5a; background: #152a24; }
-        .bubble.agent { margin-right: auto; }
-        .meta { font-size: 0.7rem; color: var(--text-muted); }
-        form { display: flex; gap: 0.5rem; }
-        form input { flex: 1; }
-        form button, .reset {
-          background: var(--accent); color: #06140f; border: none; font-weight: 600; cursor: pointer;
-        }
-        .reset { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
-        .error { color: var(--danger); margin: 0; }
-      `}</style>
     </div>
   );
 }

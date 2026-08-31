@@ -1,101 +1,78 @@
 import { Link, useLocation } from "react-router-dom";
 import { ReactNode } from "react";
 import { useAuth } from "@/features/auth/AuthContext";
+import {
+  IconBook,
+  IconExternal,
+  IconInbox,
+  IconLogout,
+  IconSettings,
+  IconSupport,
+  IconTeam,
+  IconTicket,
+  IconUsers,
+} from "@/components/ui/icons";
+import { Avatar } from "@/components/ui";
+import { cn } from "@/utils/cn";
+
+const NAV = [
+  { to: "/", label: "Inbox", icon: IconInbox, exact: true },
+  { to: "/customers", label: "Customers", icon: IconUsers },
+  { to: "/knowledge", label: "Knowledge", icon: IconBook },
+  { to: "/tickets", label: "Tickets", icon: IconTicket },
+  { to: "/teams", label: "Teams", icon: IconTeam },
+  { to: "/settings", label: "Settings", icon: IconSettings },
+];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const location = useLocation();
 
+  const isActive = (to: string, exact?: boolean) =>
+    exact ? location.pathname === to : location.pathname.startsWith(to);
+
   return (
     <div className="shell">
-      <aside>
-        <div className="logo">Support</div>
-        <nav>
-          <Link className={location.pathname === "/" ? "active" : ""} to="/">
-            Inbox
-          </Link>
-          <Link
-            className={location.pathname.startsWith("/customers") ? "active" : ""}
-            to="/customers"
-          >
-            Customers
-          </Link>
-          <Link
-            className={location.pathname.startsWith("/knowledge") ? "active" : ""}
-            to="/knowledge"
-          >
-            Knowledge
-          </Link>
-          <Link className={location.pathname.startsWith("/tickets") ? "active" : ""} to="/tickets">
-            Tickets
-          </Link>
-          <Link className={location.pathname.startsWith("/teams") ? "active" : ""} to="/teams">
-            Teams
-          </Link>
-          <Link
-            className={location.pathname.startsWith("/settings") ? "active" : ""}
-            to="/settings"
-          >
-            Settings
-          </Link>
-          <a href="/chat" target="_blank" rel="noreferrer">
-            Web Chat ↗
+      <aside className="shell-sidebar">
+        <div className="sidebar-brand">
+          <IconSupport size={22} />
+          Support
+        </div>
+
+        <nav className="sidebar-nav">
+          {NAV.map(({ to, label, icon: Icon, exact }) => (
+            <Link
+              key={to}
+              to={to}
+              className={cn("sidebar-link", isActive(to, exact) && "active")}
+            >
+              <Icon size={18} />
+              {label}
+            </Link>
+          ))}
+          <a href="/chat" target="_blank" rel="noreferrer" className="sidebar-link">
+            <IconExternal size={18} />
+            Web Chat
           </a>
         </nav>
-        <div className="user">
-          <div>{user?.full_name}</div>
-          <button type="button" onClick={() => void logout()}>
+
+        <div className="sidebar-footer">
+          {user && (
+            <div className="sidebar-user">
+              <Avatar name={user.full_name} size="sm" />
+              <div className="sidebar-user-info">
+                <div className="sidebar-user-name">{user.full_name}</div>
+                <div className="sidebar-user-email">{user.email}</div>
+              </div>
+            </div>
+          )}
+          <button type="button" className="sidebar-link" onClick={() => void logout()}>
+            <IconLogout size={18} />
             Log out
           </button>
         </div>
       </aside>
-      <main>{children}</main>
-      <style>{`
-        .shell {
-          display: grid;
-          grid-template-columns: 220px 1fr;
-          height: 100%;
-        }
-        aside {
-          background: var(--bg-elevated);
-          border-right: 1px solid var(--border);
-          padding: 1.25rem 1rem;
-          display: flex;
-          flex-direction: column;
-          gap: 1.5rem;
-        }
-        .logo {
-          font-family: var(--font-display);
-          font-size: 1.6rem;
-          color: var(--accent);
-        }
-        nav { display: grid; gap: 0.35rem; flex: 1; }
-        nav a {
-          text-decoration: none;
-          color: var(--text-muted);
-          padding: 0.55rem 0.75rem;
-          border-radius: 8px;
-        }
-        nav a.active, nav a:hover {
-          background: var(--bg-panel);
-          color: var(--text);
-        }
-        .user { font-size: 0.85rem; color: var(--text-muted); display: grid; gap: 0.5rem; }
-        .user button {
-          background: transparent;
-          border: 1px solid var(--border);
-          color: var(--text-muted);
-          border-radius: 8px;
-          padding: 0.4rem;
-          cursor: pointer;
-        }
-        main { min-width: 0; height: 100%; overflow: hidden; }
-        @media (max-width: 800px) {
-          .shell { grid-template-columns: 1fr; }
-          aside { flex-direction: row; align-items: center; border-right: none; border-bottom: 1px solid var(--border); }
-          nav { display: flex; flex: 1; }
-        }
-      `}</style>
+      <main className="shell-main">{children}</main>
     </div>
   );
 }

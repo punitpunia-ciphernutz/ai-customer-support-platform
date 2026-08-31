@@ -25,3 +25,5 @@ def test_app_includes_knowledge_routes() -> None:
     paths = set(app.openapi()["paths"])
     assert "/api/v1/knowledge/sources" in paths
     assert "/api/v1/knowledge/documents/{document_id}" in paths
+    assert "/api/v1/knowledge/documents/{document_id}/retry" in paths
+    assert "/api/v1/knowledge/sources/{source_id}/retry" in paths

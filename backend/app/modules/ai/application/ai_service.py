@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -269,7 +270,26 @@ class AIService:
             input={"conversation_id": conversation_id, "message_id": message_id},
         )
         self.db.add(run)
-        await self.db.flush()
+        try:
+            await self.db.flush()
+        except IntegrityError:
+            # Concurrent Celery workers can race on the same customer message.
+            await self.db.rollback()
+            existing = await self._get_existing_agent_run(message_id)
+            if existing is None:
+                raise
+            if existing.status == AIRunStatus.FAILED:
+                existing.status = AIRunStatus.PENDING
+                existing.error = None
+                existing.output = None
+                existing.intent = None
+                existing.retrieval_count = None
+                existing.confidence = None
+                existing.latency_ms = None
+                existing.token_usage = None
+                await self.db.flush()
+                return existing, False
+            return existing, True
         return run, False
 
     async def _ai_reply_exists(self, trigger_message_id: str) -> bool:

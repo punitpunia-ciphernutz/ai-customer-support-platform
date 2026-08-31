@@ -42,7 +42,7 @@ make up
 
 | Service | URL / port |
 |---------|------------|
-| Frontend (inbox + knowledge + chat) | http://localhost:5173 |
+| Frontend (inbox, tickets, teams, settings, knowledge, chat) | http://localhost:5173 |
 | Backend API + docs | http://localhost:8000/docs |
 | Health | http://localhost:8000/health |
 | Agent WebSocket | `ws://localhost:8000/ws?token=<jwt>` |
@@ -92,10 +92,37 @@ docker compose exec backend pytest -q \
 
 1. Open http://localhost:5173/login  
 2. **agent@example.com** / **agent123!**  
-3. Inbox loads; sidebar **Knowledge** for KB; **Web Chat** for customer demo  
-4. Inbox thread footer: **AI Support** toggle + mode (`Draft Only` / `Suggest` / `Auto Reply`)
+3. Inbox loads; sidebar **Knowledge** for KB; **Tickets** for escalations; **Teams** for routing; **Settings** for AI config  
+4. **Web Chat** (new tab) for customer demo  
+5. Inbox thread footer links to **Settings →** for AI configuration
 
-## 5. Day 3 demos
+## 5. Frontend pages walkthrough
+
+### Tickets
+
+1. Open **Tickets** in the sidebar.  
+2. Filter by status (Open, In Progress, Waiting, Resolved, Closed).  
+3. Select a ticket to view details, assign agent/team, change priority, resolve, or close.  
+4. Click **+ New ticket** to create manually — select a conversation, optional priority and assignee.  
+5. AI escalations from Web Chat appear automatically (requires worker running).
+
+### Teams
+
+1. Open **Teams** — seed data includes a **Billing** team.  
+2. Create new teams with name (required) and optional description.  
+3. View organization members available for assignment.  
+4. Team membership management is not yet available via API.
+
+### Settings (AI configuration)
+
+1. Open **Settings** — all AI configuration lives here.  
+2. Toggle AI enabled, set mode (Draft Only / Suggest / Auto Reply).  
+3. Adjust auto-reply and escalation thresholds (0–1 sliders).  
+4. Configure allowed/restricted intents and intent→team routing.  
+5. Use **AI test console** for synchronous debugging (no Celery).  
+6. Review **Recent AI runs** — click a run for full input/output details.
+
+## 6. Day 3 demos
 
 ### Flow A — AI resolve (password reset)
 
@@ -126,6 +153,7 @@ PY
 1. **Web Chat** as customer → *Can you change my company's billing plan?*
 2. AI escalates → ticket created (Billing team when seeded) → internal note in inbox (not visible in Web Chat).
 3. Customer sees short handoff message from AI Support.
+4. **Tickets** page shows the new ticket — assign, update status, or resolve.
 
 Verify AI runs:
 
@@ -141,6 +169,8 @@ PY
 
 ### AI configuration
 
+Configure via **Settings** page in the UI, or via API:
+
 ```bash
 # GET config
 curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/ai/config
@@ -150,7 +180,7 @@ curl -s -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application
   -d '{"mode":"DRAFT_ONLY"}' http://localhost:8000/api/v1/ai/config
 ```
 
-## 6. Day 2 demos (still valid)
+## 7. Day 2 demos (still valid)
 
 ### Knowledge search
 
@@ -187,13 +217,13 @@ print(r.status_code, r.json())
 PY
 ```
 
-## 7. Day 1 acceptance walkthrough
+## 8. Day 1 acceptance walkthrough
 
 1. **Customers** → create customer.  
 2. **Web Chat** → send message.  
 3. **Inbox** → reply, assign, close.  
 
-## 8. Non-Docker (optional)
+## 9. Non-Docker (optional)
 
 **Backend:**
 
@@ -217,12 +247,12 @@ npm install
 npm run dev
 ```
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
-- **No AI reply in Web Chat**: ensure **worker** is running (`docker compose logs worker`); check `ai_configs.enabled` and `mode=AUTO_REPLY`.  
+- **No AI reply in Web Chat**: ensure **worker** is running (`docker compose logs worker`); check `ai_configs.enabled` and `mode=AUTO_REPLY`. If worker logs show `Future attached to a different loop`, restart the worker after pulling the Celery `run_async` fix. Gemini **429 RESOURCE_EXHAUSTED** also blocks replies until quota resets (or unset `GEMINI_API_KEY` for offline Echo).  
 - **Duplicate AI replies**: idempotency via `processing_key` and `metadata.trigger_message_id`; FAILED Celery retries reuse the same `AIRun` row instead of creating duplicates.  
-- **Knowledge stays PENDING**: worker not consuming `celery` queue.  
-- **403 on `/ai/*`**: run `make seed` to refresh `ai.read` / `ai.write` permissions.  
+- **Knowledge stays PENDING**: worker not consuming `celery` queue — click **Retry** (↻) on the source or document row to re-queue ingestion once the worker is running.
+- **403 on Settings / AI**: run `make seed` to refresh `ai.read` / `ai.write` permissions. Agent role has AI access; READ_ONLY can view but not edit.  
 - **Weak search without API key**: expected with offline lexical embeddings; set `GEMINI_API_KEY` for Gemini.  
 - **Agent WS closes**: use `ws://…/ws?token=<jwt>`; web chat uses `/ws/public`.  
 - **Internal escalation notes in inbox only**: public chat filters `metadata.internal=true` messages.

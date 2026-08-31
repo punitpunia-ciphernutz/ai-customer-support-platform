@@ -6,6 +6,8 @@ Last updated: 2026-08-31
 
 **Day 1, Day 2, and Day 3 are complete.** The platform now runs a full async AI support agent: customer messages trigger Celery → LangGraph → knowledge retrieval → grounded answers or human escalation with tickets.
 
+**Frontend UI (Day 3 follow-up):** Tickets, Teams, and Settings pages are fully wired to backend APIs with loading/empty/error/success states. Settings consolidates all AI configuration (thresholds, intents, team routing, test console, run history).
+
 LLM: **Google Gemini** (`gemini-3.1-flash-lite`) when `GEMINI_API_KEY` is set; otherwise **Echo/heuristic** classifier + offline lexical embeddings for local demos/tests.
 
 ## Day 1 — Completed
@@ -35,6 +37,18 @@ LLM: **Google Gemini** (`gemini-3.1-flash-lite`) when `GEMINI_API_KEY` is set; o
 | 13 | React: AI bubbles (Web Chat + Inbox), agent AI diagnostics panel, AI toggle/mode |
 | 14 | `tests/test_day3_agent.py` — **17 tests** (all 6 spec scenarios, lifecycle, idempotency, Celery→WS event) |
 
+## Frontend — Completed pages
+
+| Page | Backend APIs used | Notes |
+|------|-------------------|-------|
+| **Inbox** | conversations, messages, customers, users, teams | Assign/close, AI diagnostics panel, WS realtime |
+| **Customers** | GET/POST `/customers` | Create + list with loading/error/success states |
+| **Knowledge** | knowledge sources, documents, upload, delete | Ingestion status polling |
+| **Tickets** | GET/POST/PATCH `/tickets` | List, filter, create, assign, resolve/close; WS ticket events |
+| **Teams** | GET/POST `/teams`, GET `/users` | Create teams, list members (no member CRUD API yet) |
+| **Settings** | GET/PATCH `/ai/config`, GET `/ai/runs`, POST `/ai/test` | Full AI config, intent routing, test console, run history |
+| **Web Chat** | public conversations/messages + WS | Customer-facing demo |
+
 ## Default credentials
 
 - Email: `agent@example.com`
@@ -42,11 +56,14 @@ LLM: **Google Gemini** (`gemini-3.1-flash-lite`) when `GEMINI_API_KEY` is set; o
 
 ## Verification notes
 
-- **AI mode** defaults to `AUTO_REPLY` (seed). Use Inbox AI settings or `PATCH /ai/config` for `DRAFT_ONLY` during safe testing.
+- **AI mode** defaults to `AUTO_REPLY` (seed). Configure in **Settings → AI Support** or via `PATCH /ai/config`.
 - Celery worker must run for async AI replies from Web Chat (`docker compose up worker`).
 - Customer public chat hides `metadata.internal` messages (escalation notes).
 - Without `GEMINI_API_KEY`: Echo LLM + offline embeddings (sufficient for demos/tests).
 - With `GEMINI_API_KEY`: Gemini embeddings + structured LLM output.
+- **Tickets page** shows AI-escalated and manually created tickets; filter by status, assign agents/teams, resolve/close.
+- **Settings page** is the single place for AI thresholds, allowed/restricted intents, intent→team routing, test console, and run history.
+- **Teams page** creates teams and lists org users; team membership API not yet available.
 - **Day 3 audit:** [`docs/day3-audit.md`](day3-audit.md) — all 24 requirements complete.
 - Audit detail: [`docs/day1-day2-final-audit.md`](day1-day2-final-audit.md)
 - Day 3 plan: [`docs/day3-implementation-plan.md`](day3-implementation-plan.md)

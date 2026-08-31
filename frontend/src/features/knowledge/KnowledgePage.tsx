@@ -1,7 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, API_BASE } from "@/services/api/client";
+import { api, API_BASE, ApiError } from "@/services/api/client";
+import {
+  Alert,
+  EmptyState,
+  LoadingState,
+  Modal,
+  PageHeader,
+  StatCard,
+} from "@/components/ui";
+import { IconBook, IconChevronLeft, IconPlus, IconRefresh, IconTrash } from "@/components/ui/icons";
+import { formatDate, statusClass } from "@/utils/format";
 
 type KnowledgeSource = {
   id: string;
@@ -24,8 +34,13 @@ function getToken(): string | null {
   return localStorage.getItem("access_token");
 }
 
+function isRetryableStatus(status: string): boolean {
+  return status === "PENDING" || status === "FAILED" || status === "PROCESSING";
+}
+
 export function KnowledgePage() {
   const qc = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<"TEXT" | "PDF" | "URL">("TEXT");
 
@@ -43,53 +58,130 @@ export function KnowledgePage() {
       }),
     onSuccess: () => {
       setName("");
+      setShowCreate(false);
       void qc.invalidateQueries({ queryKey: ["knowledge-sources"] });
     },
   });
 
+  const retrySource = useMutation({
+    mutationFn: (sourceId: string) =>
+      api(`/knowledge/sources/${sourceId}/retry`, { method: "POST" }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["knowledge-sources"] });
+    },
+  });
+
+  const completed = (sources.data ?? []).filter((s) => s.status === "COMPLETED").length;
+
   return (
-    <div className="page">
-      <h1>Knowledge Base</h1>
-      <p className="lede">Add sources, ingest documents, and watch status update as Celery processes them.</p>
+    <div className="page-scroll">
+      <PageHeader
+        title="Knowledge Base"
+        description="Add sources, ingest documents, and watch status update as Celery processes them."
+        action={
+          <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
+            <IconPlus size={16} />
+            Add Source
+          </button>
+        }
+      />
 
-      <form
-        className="create"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!name.trim()) return;
-          create.mutate();
-        }}
-      >
-        <input
-          placeholder="Source name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <select value={type} onChange={(e) => setType(e.target.value as typeof type)}>
-          <option value="TEXT">TEXT</option>
-          <option value="PDF">PDF</option>
-          <option value="URL">URL</option>
-        </select>
-        <button type="submit" disabled={create.isPending}>
-          + Add Knowledge
-        </button>
-      </form>
+      <div className="stats-grid">
+        <StatCard icon={<IconBook size={20} />} value={sources.data?.length ?? 0} label="Total Sources" color="green" />
+        <StatCard icon={<IconBook size={20} />} value={completed} label="Completed" sublabel="Ready for retrieval" color="blue" />
+      </div>
 
-      <h2>Sources</h2>
-      <ul className="list">
-        {sources.data?.map((s) => (
-          <li key={s.id}>
-            <Link to={`/knowledge/${s.id}`}>
-              <strong>{s.name}</strong>
-              <span>{s.type}</span>
-              <em className={`status ${s.status.toLowerCase()}`}>{s.status}</em>
-            </Link>
-          </li>
-        ))}
-        {!sources.data?.length && <li className="empty">No sources yet.</li>}
-      </ul>
+      {sources.isLoading && <LoadingState message="Loading sources…" />}
+      {sources.isError && (
+        <Alert type="error">
+          {sources.error instanceof ApiError ? sources.error.message : "Failed to load sources."}
+        </Alert>
+      )}
 
-      <style>{pageStyles}</style>
+      {!sources.isLoading && !sources.data?.length && (
+        <EmptyState message="No knowledge sources yet. Add one to start ingesting documents." />
+      )}
+
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {(sources.data ?? []).map((s) => (
+              <tr key={s.id}>
+                <td className="cell-primary">{s.name}</td>
+                <td><span className="badge badge-normal">{s.type}</span></td>
+                <td><span className={statusClass(s.status.toLowerCase())}>{s.status}</span></td>
+                <td className="text-sm text-muted">{formatDate(s.created_at)}</td>
+                <td>
+                  <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                    {isRetryableStatus(s.status) && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm btn-icon"
+                        disabled={retrySource.isPending}
+                        onClick={() => retrySource.mutate(s.id)}
+                        aria-label="Retry ingestion"
+                        title="Re-queue ingestion (requires Celery worker)"
+                      >
+                        <IconRefresh size={14} />
+                      </button>
+                    )}
+                    <Link to={`/knowledge/${s.id}`} className="btn btn-secondary btn-sm">
+                      Manage →
+                    </Link>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {showCreate && (
+        <Modal
+          title="Add Knowledge Source"
+          onClose={() => setShowCreate(false)}
+          footer={
+            <>
+              <button type="button" className="btn btn-ghost" onClick={() => setShowCreate(false)}>Cancel</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={create.isPending || !name.trim()}
+                onClick={() => create.mutate()}
+              >
+                Add Source
+              </button>
+            </>
+          }
+        >
+          <div className="form-field">
+            <label className="form-label">Source name</label>
+            <input
+              className="form-input"
+              placeholder="e.g. FAQ, Product Docs"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="form-field">
+            <label className="form-label">Type</label>
+            <select className="form-select" value={type} onChange={(e) => setType(e.target.value as typeof type)}>
+              <option value="TEXT">TEXT</option>
+              <option value="PDF">PDF</option>
+              <option value="URL">URL</option>
+            </select>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -117,10 +209,6 @@ export function KnowledgeSourcePage() {
     enabled: Boolean(sourceId),
     refetchInterval: 2500,
   });
-
-  useEffect(() => {
-    // keep polling while any document is pending/processing
-  }, [documents.data]);
 
   const addText = useMutation({
     mutationFn: () =>
@@ -177,106 +265,111 @@ export function KnowledgeSourcePage() {
     },
   });
 
+  const retryDocument = useMutation({
+    mutationFn: (documentId: string) =>
+      api(`/knowledge/documents/${documentId}/retry`, { method: "POST" }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["knowledge-documents", sourceId] });
+      void qc.invalidateQueries({ queryKey: ["knowledge-sources"] });
+    },
+  });
+
   return (
-    <div className="page">
-      <p>
-        <Link to="/knowledge">← Knowledge Base</Link>
-      </p>
-      <h1>{source?.name ?? "Source"}</h1>
-      <p className="lede">
-        Type: {source?.type ?? "…"} · Status:{" "}
-        <em className={`status ${(source?.status ?? "").toLowerCase()}`}>{source?.status}</em>
-      </p>
+    <div className="page-scroll">
+      <Link to="/knowledge" className="btn btn-ghost btn-sm mb-4" style={{ display: "inline-flex" }}>
+        <IconChevronLeft size={16} />
+        Knowledge Base
+      </Link>
 
-      {source?.type === "TEXT" && (
-        <form
-          className="create stacked"
-          onSubmit={(e) => {
-            e.preventDefault();
-            addText.mutate();
-          }}
-        >
-          <input placeholder="Document title" value={title} onChange={(e) => setTitle(e.target.value)} />
-          <textarea
-            placeholder="Paste FAQ / help text"
-            rows={5}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-          />
-          <button type="submit" disabled={addText.isPending}>
-            Add text document
-          </button>
-        </form>
-      )}
+      <PageHeader
+        title={source?.name ?? "Source"}
+        description={`Type: ${source?.type ?? "…"} · Status: ${source?.status ?? "…"}`}
+      />
 
-      {source?.type === "URL" && (
-        <form
-          className="create stacked"
-          onSubmit={(e) => {
-            e.preventDefault();
-            addUrl.mutate();
-          }}
-        >
-          <input placeholder="Document title" value={title} onChange={(e) => setTitle(e.target.value)} />
-          <input placeholder="https://…" value={url} onChange={(e) => setUrl(e.target.value)} />
-          <button type="submit" disabled={addUrl.isPending}>
-            Add URL document
-          </button>
-        </form>
-      )}
+      <div className="card mb-6">
+        <h2 className="section-title">Add Document</h2>
 
-      {source?.type === "PDF" && (
-        <form className="create stacked" onSubmit={(e) => void addPdf(e)}>
-          <input placeholder="Document title" value={title} onChange={(e) => setTitle(e.target.value)} />
-          <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-          <button type="submit">Upload PDF</button>
-        </form>
-      )}
+        {source?.type === "TEXT" && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); addText.mutate(); }}
+            style={{ display: "grid", gap: "0.75rem", maxWidth: 560 }}
+          >
+            <input className="form-input" placeholder="Document title" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <textarea className="form-textarea" placeholder="Paste FAQ / help text" rows={5} value={content} onChange={(e) => setContent(e.target.value)} />
+            <button type="submit" className="btn btn-primary" disabled={addText.isPending} style={{ justifySelf: "start" }}>
+              Add Text Document
+            </button>
+          </form>
+        )}
 
-      <h2>Documents</h2>
-      <ul className="list">
-        {documents.data?.map((d) => (
-          <li key={d.id}>
-            <div className="row">
-              <strong>{d.title}</strong>
-              <em className={`status ${d.status.toLowerCase()}`}>{d.status}</em>
-              <button type="button" className="danger" onClick={() => remove.mutate(d.id)}>
-                Delete
-              </button>
-            </div>
-            {d.error_message && <small className="err">{d.error_message}</small>}
-          </li>
-        ))}
-        {!documents.data?.length && <li className="empty">No documents yet.</li>}
-      </ul>
-      <style>{pageStyles}</style>
+        {source?.type === "URL" && (
+          <form
+            onSubmit={(e) => { e.preventDefault(); addUrl.mutate(); }}
+            style={{ display: "grid", gap: "0.75rem", maxWidth: 560 }}
+          >
+            <input className="form-input" placeholder="Document title" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input className="form-input" placeholder="https://…" value={url} onChange={(e) => setUrl(e.target.value)} />
+            <button type="submit" className="btn btn-primary" disabled={addUrl.isPending} style={{ justifySelf: "start" }}>
+              Add URL Document
+            </button>
+          </form>
+        )}
+
+        {source?.type === "PDF" && (
+          <form onSubmit={(e) => void addPdf(e)} style={{ display: "grid", gap: "0.75rem", maxWidth: 560 }}>
+            <input className="form-input" placeholder="Document title" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input type="file" accept="application/pdf" className="form-input" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+            <button type="submit" className="btn btn-primary" style={{ justifySelf: "start" }}>Upload PDF</button>
+          </form>
+        )}
+      </div>
+
+      <h2 className="section-title">Documents</h2>
+      {documents.isLoading && <LoadingState message="Loading documents…" />}
+
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {(documents.data ?? []).map((d) => (
+              <tr key={d.id}>
+                <td className="cell-primary">{d.title}</td>
+                <td><span className={statusClass(d.status.toLowerCase())}>{d.status}</span></td>
+                <td className="text-sm text-muted">{formatDate(d.created_at)}</td>
+                <td>
+                  <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                    {isRetryableStatus(d.status) && (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm btn-icon"
+                        disabled={retryDocument.isPending}
+                        onClick={() => retryDocument.mutate(d.id)}
+                        aria-label="Retry ingestion"
+                        title="Re-queue ingestion (requires Celery worker)"
+                      >
+                        <IconRefresh size={14} />
+                      </button>
+                    )}
+                    <button type="button" className="btn btn-danger btn-sm btn-icon" onClick={() => remove.mutate(d.id)} aria-label="Delete">
+                      <IconTrash size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!documents.isLoading && !documents.data?.length && (
+          <EmptyState message="No documents yet." />
+        )}
+      </div>
     </div>
   );
 }
-
-const pageStyles = `
-  .page { padding: 1.5rem; overflow: auto; height: 100%; }
-  h1 { margin-top: 0; font-family: var(--font-display); font-weight: 400; }
-  .lede { color: var(--text-muted); margin-top: -0.5rem; }
-  .create {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 0.5rem; margin-bottom: 1.5rem;
-  }
-  .create.stacked { grid-template-columns: 1fr; }
-  input, select, textarea, button {
-    background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text);
-    border-radius: 8px; padding: 0.55rem 0.7rem; font: inherit;
-  }
-  button { cursor: pointer; background: var(--accent); color: #111; border: none; font-weight: 600; }
-  button.danger { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
-  .list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.5rem; }
-  .list li { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 1rem; }
-  .list a { color: inherit; text-decoration: none; display: grid; grid-template-columns: 1fr auto auto; gap: 0.75rem; align-items: center; }
-  .row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.75rem; align-items: center; }
-  .status { font-style: normal; font-size: 0.8rem; letter-spacing: 0.02em; }
-  .status.completed { color: #3d8b65; }
-  .status.processing, .status.pending { color: #b0892a; }
-  .status.failed { color: #b04a4a; }
-  .empty { color: var(--text-muted); }
-  .err { color: #b04a4a; display: block; margin-top: 0.35rem; }
-`;

@@ -9,6 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.knowledge.domain.models import Document, DocumentChunk, IngestionStatus, KnowledgeSource
+
+RETRYABLE_STATUSES = frozenset(
+    {IngestionStatus.PENDING, IngestionStatus.PROCESSING, IngestionStatus.FAILED}
+)
 from app.modules.knowledge.infrastructure.embeddings import EmbeddingProvider, get_embedding_provider
 from app.modules.knowledge.infrastructure.loaders import LoadedContent
 from app.modules.knowledge.infrastructure.parsers import get_default_chunker
@@ -43,6 +47,23 @@ class IngestionService:
             status=IngestionStatus.PENDING,
         )
         self.db.add(document)
+        source.status = IngestionStatus.PENDING
+        await self.db.flush()
+        await self.db.refresh(document)
+        return document
+
+    async def prepare_retry(self, document: Document) -> Document:
+        """Reset a stuck or failed document so ingestion can run again."""
+        if document.status not in RETRYABLE_STATUSES:
+            raise ValueError(f"Document status {document.status.value} is not retryable")
+
+        result = await self.db.execute(
+            select(KnowledgeSource).where(KnowledgeSource.id == document.knowledge_source_id)
+        )
+        source = result.scalar_one()
+
+        document.status = IngestionStatus.PENDING
+        document.error_message = None
         source.status = IngestionStatus.PENDING
         await self.db.flush()
         await self.db.refresh(document)

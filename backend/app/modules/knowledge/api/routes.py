@@ -5,7 +5,7 @@ from app.api.deps import require_permission
 from app.infrastructure.database.models import User
 from app.infrastructure.database.session import get_db
 from app.modules.auth.permissions import KNOWLEDGE_READ, KNOWLEDGE_WRITE
-from app.modules.knowledge.application.ingestion_service import IngestionService
+from app.modules.knowledge.application.ingestion_service import IngestionService, RETRYABLE_STATUSES
 from app.modules.knowledge.application.knowledge_service import KnowledgeService
 from app.modules.knowledge.domain.models import KnowledgeSourceType
 from app.modules.knowledge.domain.schemas import (
@@ -161,6 +161,67 @@ async def add_pdf_document(
     await db.commit()
     ingest_document.delay(document.id)
     return DocumentAccepted(document=DocumentOut.model_validate(document), job_queued=True)
+
+
+@router.post(
+    "/documents/{document_id}/retry",
+    response_model=DocumentAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def retry_document(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(KNOWLEDGE_WRITE)),
+) -> DocumentAccepted:
+    document = await KnowledgeService(db).get_document(user.organization_id, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    try:
+        document = await IngestionService(db).prepare_retry(document)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    await db.commit()
+    ingest_document.delay(document.id)
+    return DocumentAccepted(document=DocumentOut.model_validate(document), job_queued=True)
+
+
+@router.post(
+    "/sources/{source_id}/retry",
+    response_model=list[DocumentAccepted],
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def retry_source_documents(
+    source_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(KNOWLEDGE_WRITE)),
+) -> list[DocumentAccepted]:
+    service = KnowledgeService(db)
+    source = await service.get_source(user.organization_id, source_id)
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge source not found")
+
+    documents = await service.list_documents(user.organization_id, source_id)
+    retryable = [d for d in documents if d.status in RETRYABLE_STATUSES]
+    if not retryable:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No documents to retry — add a document or wait for processing to finish",
+        )
+
+    ingestion = IngestionService(db)
+    accepted: list[DocumentAccepted] = []
+    for document in retryable:
+        document = await ingestion.prepare_retry(document)
+        accepted.append(
+            DocumentAccepted(document=DocumentOut.model_validate(document), job_queued=True)
+        )
+
+    await db.commit()
+    for item in accepted:
+        ingest_document.delay(item.document.id)
+    return accepted
 
 
 @router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

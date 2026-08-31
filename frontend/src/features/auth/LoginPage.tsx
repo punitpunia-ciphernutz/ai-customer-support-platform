@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useAuth } from "./AuthContext";
+import { IconSupport } from "@/components/ui/icons";
 
 const schema = z.object({
   email: z.string().email(),
@@ -38,67 +39,31 @@ export function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <p className="brand">Support Platform</p>
-        <h1>Sign in</h1>
-        <p className="muted">Agent access to the shared inbox</p>
-        <form onSubmit={onSubmit}>
-          <label>
-            Email
-            <input type="email" {...register("email")} />
-          </label>
-          <label>
-            Password
-            <input type="password" {...register("password")} />
-          </label>
-          {error && <p className="error">{error}</p>}
-          <button type="submit" disabled={isSubmitting}>
+        <div className="login-brand">
+          <IconSupport size={24} />
+          Support Platform
+        </div>
+        <h1 className="page-title" style={{ fontSize: "1.25rem", marginBottom: "0.25rem" }}>
+          Sign in
+        </h1>
+        <p className="page-desc" style={{ marginBottom: "1.5rem" }}>
+          Agent access to the shared inbox
+        </p>
+        <form onSubmit={onSubmit} style={{ display: "grid", gap: "1rem" }}>
+          <div className="form-field">
+            <label className="form-label" htmlFor="email">Email</label>
+            <input id="email" type="email" className="form-input" {...register("email")} />
+          </div>
+          <div className="form-field">
+            <label className="form-label" htmlFor="password">Password</label>
+            <input id="password" type="password" className="form-input" {...register("password")} />
+          </div>
+          {error && <div className="alert alert-error">{error}</div>}
+          <button type="submit" className="btn btn-primary" disabled={isSubmitting} style={{ width: "100%" }}>
             {isSubmitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
       </div>
-      <style>{`
-        .login-page {
-          min-height: 100%;
-          display: grid;
-          place-items: center;
-          padding: 2rem;
-        }
-        .login-card {
-          width: min(420px, 100%);
-          background: var(--bg-elevated);
-          border: 1px solid var(--border);
-          border-radius: 16px;
-          padding: 2rem;
-        }
-        .brand {
-          font-family: var(--font-display);
-          font-size: 1.75rem;
-          margin: 0 0 0.5rem;
-          color: var(--accent);
-        }
-        .login-card h1 { margin: 0 0 0.25rem; font-size: 1.35rem; }
-        .muted { color: var(--text-muted); margin: 0 0 1.5rem; }
-        form { display: grid; gap: 1rem; }
-        label { display: grid; gap: 0.35rem; font-size: 0.9rem; color: var(--text-muted); }
-        input {
-          background: var(--bg);
-          border: 1px solid var(--border);
-          border-radius: 8px;
-          padding: 0.7rem 0.85rem;
-          color: var(--text);
-        }
-        button {
-          background: var(--accent);
-          color: #06140f;
-          border: none;
-          border-radius: 8px;
-          padding: 0.75rem;
-          font-weight: 600;
-          cursor: pointer;
-        }
-        button:hover { background: var(--accent-hover); }
-        .error { color: var(--danger); margin: 0; }
-      `}</style>
     </div>
   );
 }
