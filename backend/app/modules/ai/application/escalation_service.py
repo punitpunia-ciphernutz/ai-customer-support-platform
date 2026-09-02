@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.database.models import ActorType, Priority, SenderType, Team, Ticket, TicketSource, TicketStatus
+from app.infrastructure.database.models import ActorType, Message, Priority, SenderType, Team, Ticket, TicketSource, TicketStatus
 from app.infrastructure.events import DomainEvent, event_bus
 from app.modules.ai.domain.schemas import AIHandoffPackage, SupportAgentState
 from app.modules.conversations.service import ConversationService
@@ -82,6 +82,42 @@ class EscalationService:
             intent_team_map={},
         )
 
+    async def create_from_ai_timeout(
+        self,
+        state: SupportAgentState,
+        *,
+        organization_id: str,
+        trigger_message_id: str,
+    ) -> Ticket:
+        ticket = await self._create_ticket(
+            state,
+            organization_id=organization_id,
+            source=TicketSource.AUTOMATION,
+            ai_run_id=None,
+            intent_team_map={},
+            notify_customer=False,
+        )
+        conversation = await self.conversations.get_conversation(organization_id, state.conversation_id or "")
+        notice = Message(
+            conversation_id=state.conversation_id,
+            sender_type=SenderType.SYSTEM,
+            sender_id=None,
+            content=(
+                "We weren't able to generate an automatic response in time. "
+                "A support ticket has been created and our team will follow up with you shortly."
+            ),
+            metadata_={
+                "internal": False,
+                "timeout_escalation": True,
+                "ticket_id": ticket.id,
+                "trigger_message_id": trigger_message_id,
+            },
+        )
+        self.db.add(notice)
+        await self.db.flush()
+        await self.conversations._publish_message(notice, conversation)  # noqa: SLF001
+        return ticket
+
     async def _create_ticket(
         self,
         state: SupportAgentState,
@@ -120,9 +156,9 @@ class EscalationService:
         await self.db.refresh(ticket)
 
         internal_note = self.render_handoff_note(package)
-        from app.infrastructure.database.models import Message
+        from app.infrastructure.database.models import Message as MessageModel
 
-        note = Message(
+        note = MessageModel(
             conversation_id=state.conversation_id,
             sender_type=SenderType.SYSTEM,
             sender_id=None,

@@ -68,3 +68,14 @@ class MessageOut(BaseModel):
 
 class InboxFilter(BaseModel):
     view: str = "all"  # all | mine | unassigned | team
+
+
+class AIResponseStatusOut(BaseModel):
+    status: str
+    ticket_id: str | None = None
+    timeout_seconds: int
+
+
+class PublicAIResponseCheck(BaseModel):
+    customer_id: str
+    message_id: str | None = None

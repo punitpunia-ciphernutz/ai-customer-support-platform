@@ -4,10 +4,13 @@ import { api, ApiError } from "@/services/api/client";
 import { Link, useSearchParams } from "react-router-dom";
 import type { Conversation, Customer, Message, UserListItem } from "@/types";
 import { useAuth } from "@/features/auth/AuthContext";
+import { AiRespondingIndicator, MessageBubble } from "@/features/conversations/MessageBubble";
 import { useSupportSocket } from "@/hooks/useSupportSocket";
+import { useInboxAwaitingAi } from "@/hooks/useAwaitingAiResponse";
 import { Alert, Avatar, EmptyState, LoadingState } from "@/components/ui";
 import { cn } from "@/utils/cn";
-import { statusClass } from "@/utils/format";
+import { formatCost, statusClass } from "@/utils/format";
+import type { AIUsageSummary } from "@/types";
 
 type View = "all" | "mine" | "unassigned" | "team";
 
@@ -63,6 +66,12 @@ export function InboxPage() {
     enabled: !!selectedId,
   });
 
+  const conversationAiUsage = useQuery({
+    queryKey: ["conversation-ai-usage", selectedId],
+    queryFn: () => api<AIUsageSummary>(`/conversations/${selectedId}/ai-usage`),
+    enabled: !!selectedId,
+  });
+
   useSupportSocket({
     token: localStorage.getItem("access_token"),
     onEvent: (event) => {
@@ -73,7 +82,10 @@ export function InboxPage() {
       ) {
         void qc.invalidateQueries({ queryKey: ["conversations"] });
         void qc.invalidateQueries({ queryKey: ["tickets"] });
-        if (selectedId) void qc.invalidateQueries({ queryKey: ["messages", selectedId] });
+        if (selectedId) {
+          void qc.invalidateQueries({ queryKey: ["messages", selectedId] });
+          void qc.invalidateQueries({ queryKey: ["conversation-ai-usage", selectedId] });
+        }
       }
     },
   });
@@ -83,10 +95,10 @@ export function InboxPage() {
     [conversations.data, selectedId]
   );
 
+  const { awaitingAi } = useInboxAwaitingAi(messages.data, selected?.ai_control_mode);
+
   const customerName = (id: string) =>
     customers.data?.find((c) => c.id === id)?.name ?? "Customer";
-
-  const senderLabel = (type: string) => (type === "AI" ? "AI Support" : type);
 
   const latestAiMeta = useMemo(() => {
     const aiMsgs = (messages.data ?? []).filter(
@@ -158,7 +170,7 @@ export function InboxPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.data]);
+  }, [messages.data, awaitingAi]);
 
   return (
     <div className="page-full">
@@ -342,19 +354,9 @@ export function InboxPage() {
                 {(messages.data ?? [])
                   .filter((m) => !m.metadata?.internal)
                   .map((m) => (
-                  <div
-                    key={m.id}
-                    className={cn("message-bubble", m.sender_type.toLowerCase())}
-                  >
-                    <div className="message-sender">{senderLabel(m.sender_type)}</div>
-                    <div>{m.content}</div>
-                    {m.sender_type === "AI" && m.metadata?.confidence != null && (
-                      <div className="message-ai-tag">
-                        AI Response · {Math.round(m.metadata.confidence * 100)}%
-                      </div>
-                    )}
-                  </div>
-                ))}
+                    <MessageBubble key={m.id} message={m} />
+                  ))}
+                {awaitingAi && <AiRespondingIndicator />}
                 <div ref={bottomRef} />
               </div>
 
@@ -373,6 +375,13 @@ export function InboxPage() {
                       <div><dt>Confidence</dt><dd>{latestAiMeta.confidence != null ? `${Math.round(latestAiMeta.confidence * 100)}%` : "—"}</dd></div>
                       <div><dt>Knowledge</dt><dd>{latestAiMeta.citations?.map((c) => c.title).join(", ") || "—"}</dd></div>
                       <div><dt>Status</dt><dd>{latestAiMeta.ai_status ?? (latestAiMeta.grounded ? "Grounded" : "—")}</dd></div>
+                      {conversationAiUsage.data && (
+                        <>
+                          <div><dt>AI cost (conversation)</dt><dd>{formatCost(conversationAiUsage.data.total_cost_usd)}</dd></div>
+                          <div><dt>AI runs</dt><dd>{conversationAiUsage.data.total_runs}</dd></div>
+                          <div><dt>Tokens</dt><dd>{conversationAiUsage.data.total_tokens.total.toLocaleString()}</dd></div>
+                        </>
+                      )}
                     </dl>
                   )}
                 </aside>

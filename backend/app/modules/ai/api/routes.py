@@ -14,6 +14,7 @@ from app.modules.ai.domain.schemas import (
     AIConfigUpdate,
     AIRunDetail,
     AIRunSummary,
+    AIUsageSummary,
     AITestRequest,
     AITestResponse,
     BotConfigurationOut,
@@ -103,6 +104,18 @@ async def get_ai_run(
     if run is None:
         raise HTTPException(status_code=404, detail="AI run not found")
     return run
+
+
+@router.get("/usage", response_model=AIUsageSummary)
+async def get_ai_usage(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(AI_READ)),
+    days: int = Query(default=30, ge=1, le=365),
+) -> AIUsageSummary:
+    from app.modules.ai.application.usage_service import AIUsageService
+
+    summary = await AIUsageService(db).get_org_summary(user.organization_id, days=days)
+    return AIUsageSummary.model_validate(summary)
 
 
 async def _config_out(db: AsyncSession, organization_id: str) -> AIConfigOut:

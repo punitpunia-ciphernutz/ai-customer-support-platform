@@ -87,6 +87,7 @@ Agent online status and schedule for routing.
 | `hybrid_keyword_weight` | float | 0.3 |
 | `business_hours` | JSONB | Mon–Fri 09:00–18:00 UTC |
 | `missed_chat_timeout_minutes` | int | 5 |
+| `ai_response_timeout_seconds` | int | 60 |
 
 ## Enums
 

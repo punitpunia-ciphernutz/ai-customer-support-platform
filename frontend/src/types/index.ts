@@ -92,6 +92,10 @@ export type Message = {
     ai_escalation?: boolean;
     escalation?: boolean;
     ticket_id?: string;
+    timeout_ticket_id?: string;
+    timeout_escalation?: boolean;
+    offline_notice?: boolean;
+    estimated_cost_usd?: number;
     suggestion?: boolean;
     suggestion_status?: string;
   };
@@ -121,6 +125,7 @@ export type AIConfig = {
   escalate_if_unknown?: boolean;
   multilingual_enabled?: boolean;
   missed_chat_timeout_minutes?: number;
+  ai_response_timeout_seconds?: number;
   allowed_intents: string[] | null;
   restricted_intents: string[] | null;
   intent_team_map: Record<string, string> | null;
@@ -152,6 +157,14 @@ export type AIRunDetail = AIRunSummary & {
   token_usage: Record<string, unknown> | null;
   confidence_components?: Record<string, unknown> | null;
   trace?: Record<string, unknown>[] | null;
+};
+
+export type AIUsageSummary = {
+  conversation_id?: string | null;
+  period_days?: number | null;
+  total_runs: number;
+  total_cost_usd: number;
+  total_tokens: { input: number; output: number; total: number };
 };
 
 export type AITestResponse = {

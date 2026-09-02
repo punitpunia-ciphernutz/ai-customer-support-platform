@@ -255,6 +255,7 @@ class AIConfigOut(BaseModel):
     multilingual_enabled: bool = True
     hybrid_keyword_weight: float = 0.3
     missed_chat_timeout_minutes: int = 5
+    ai_response_timeout_seconds: int = 60
     business_hours: dict[str, Any] | None = None
     allowed_intents: list[str] | None = None
     restricted_intents: list[str] | None = None
@@ -275,6 +276,7 @@ class AIConfigUpdate(BaseModel):
     multilingual_enabled: bool | None = None
     hybrid_keyword_weight: float | None = Field(default=None, ge=0.0, le=1.0)
     missed_chat_timeout_minutes: int | None = Field(default=None, ge=1, le=1440)
+    ai_response_timeout_seconds: int | None = Field(default=None, ge=15, le=600)
     business_hours: dict[str, Any] | None = None
     allowed_intents: list[str] | None = None
     restricted_intents: list[str] | None = None
@@ -314,3 +316,11 @@ class AIRunDetail(AIRunSummary):
     trace: list[dict[str, Any]] | None = None
 
     model_config = {"from_attributes": True}
+
+
+class AIUsageSummary(BaseModel):
+    conversation_id: str | None = None
+    period_days: int | None = None
+    total_runs: int
+    total_cost_usd: float
+    total_tokens: dict[str, int]

@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/services/api/client";
-import { formatDate, formatPercent, statusClass } from "@/utils/format";
+import { formatDate, formatCost, formatPercent, statusClass } from "@/utils/format";
 import type {
   AIConfig,
   AIMode,
   AIRunDetail,
   AIRunSummary,
+  AIUsageSummary,
   AITestResponse,
   IntentLabel,
 } from "@/types";
@@ -16,6 +17,7 @@ import {
   EmptyState,
   LoadingState,
   PageHeader,
+  StatCard,
 } from "@/components/ui";
 import { cn } from "@/utils/cn";
 
@@ -38,6 +40,11 @@ export function SettingsPage() {
     queryKey: ["ai-runs"],
     queryFn: () => api<AIRunSummary[]>("/ai/runs?limit=50"),
     refetchInterval: 10000,
+  });
+
+  const aiUsage = useQuery({
+    queryKey: ["ai-usage"],
+    queryFn: () => api<AIUsageSummary>("/ai/usage?days=30"),
   });
 
   const runDetail = useQuery({
@@ -115,6 +122,25 @@ export function SettingsPage() {
 
       {saveMsg && <Alert type="success">{saveMsg}</Alert>}
       {saveErr && <Alert type="error">{saveErr}</Alert>}
+
+      {aiUsage.data && (
+        <section className="grid-4 mb-6" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "1rem" }}>
+          <StatCard
+            value={formatCost(aiUsage.data.total_cost_usd)}
+            label="AI cost (30 days)"
+            sublabel={`${aiUsage.data.total_runs} runs`}
+            color="green"
+            icon={<span>$</span>}
+          />
+          <StatCard
+            value={aiUsage.data.total_tokens.total.toLocaleString()}
+            label="Total tokens"
+            sublabel={`${aiUsage.data.total_tokens.input.toLocaleString()} in · ${aiUsage.data.total_tokens.output.toLocaleString()} out`}
+            color="blue"
+            icon={<span>T</span>}
+          />
+        </section>
+      )}
 
       <section className="card mb-6">
         <h2 className="section-title">AI Support</h2>
@@ -223,6 +249,25 @@ export function SettingsPage() {
                 />
                 Multilingual responses
               </label>
+            </div>
+            <div className="form-field" style={{ maxWidth: 280 }}>
+              <label className="form-label" htmlFor="ai-response-timeout">
+                AI response timeout ({config.ai_response_timeout_seconds ?? 60}s)
+              </label>
+              <input
+                id="ai-response-timeout"
+                type="range"
+                min={15}
+                max={180}
+                step={5}
+                value={config.ai_response_timeout_seconds ?? 60}
+                onChange={(e) =>
+                  patchConfig.mutate({ ai_response_timeout_seconds: parseInt(e.target.value, 10) })
+                }
+                disabled={patchConfig.isPending}
+                style={{ width: "100%" }}
+              />
+              <span className="form-hint">Create a ticket if AI does not respond in time</span>
             </div>
             {config.mode_display && (
               <p className="form-hint">Display mode: {config.mode_display.replace(/_/g, " ")}</p>
@@ -425,6 +470,7 @@ export function SettingsPage() {
                 <div className="list-item-meta">
                   {run.intent && <span>{run.intent.replace(/_/g, " ")}</span>}
                   {run.confidence != null && <span>{formatPercent(run.confidence)}</span>}
+                  {run.estimated_cost_usd != null && <span>{formatCost(run.estimated_cost_usd)}</span>}
                   {run.latency_ms != null && <span>{run.latency_ms}ms</span>}
                   <span>{formatDate(run.created_at)}</span>
                 </div>
@@ -456,6 +502,16 @@ export function SettingsPage() {
                     )}
                     <div><dt>Retrieval</dt><dd>{runDetail.data.retrieval_count ?? "—"}</dd></div>
                     <div><dt>Latency</dt><dd>{runDetail.data.latency_ms != null ? `${runDetail.data.latency_ms}ms` : "—"}</dd></div>
+                    <div><dt>Cost</dt><dd>{formatCost(runDetail.data.estimated_cost_usd)}</dd></div>
+                    {runDetail.data.token_usage && (
+                      <div>
+                        <dt>Tokens</dt>
+                        <dd>
+                          {Number(runDetail.data.token_usage.input_tokens ?? runDetail.data.token_usage.prompt_tokens ?? 0).toLocaleString()} in ·{" "}
+                          {Number(runDetail.data.token_usage.output_tokens ?? runDetail.data.token_usage.completion_tokens ?? 0).toLocaleString()} out
+                        </dd>
+                      </div>
+                    )}
                     <div><dt>Created</dt><dd>{formatDate(runDetail.data.created_at)}</dd></div>
                     {runDetail.data.error && (
                       <div><dt>Error</dt><dd className="form-error">{runDetail.data.error}</dd></div>

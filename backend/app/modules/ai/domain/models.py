@@ -119,6 +119,7 @@ class AIConfig(Base):
     hybrid_keyword_weight: Mapped[float] = mapped_column(Float, default=0.3, nullable=False)
     business_hours: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     missed_chat_timeout_minutes: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    ai_response_timeout_seconds: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
     allowed_intents: Mapped[list[str] | None] = mapped_column(JSONB)
     restricted_intents: Mapped[list[str] | None] = mapped_column(JSONB, default=list)
     intent_team_map: Mapped[dict[str, str] | None] = mapped_column(JSONB)

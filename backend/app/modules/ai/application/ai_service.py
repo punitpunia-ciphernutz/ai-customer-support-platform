@@ -349,6 +349,7 @@ class AIService:
                 "grounded": response.grounded,
                 "citations": [c.model_dump() for c in response.citations],
                 "ai_status": "AI Resolved",
+                "estimated_cost_usd": run.estimated_cost_usd,
             },
         )
         self.db.add(msg)

@@ -84,8 +84,10 @@ export function StatCard({
   );
 }
 
-export function Alert({ type, children }: { type: "success" | "error"; children: ReactNode }) {
-  return <div className={cn("alert", type === "success" ? "alert-success" : "alert-error")}>{children}</div>;
+export function Alert({ type, children }: { type: "success" | "error" | "info"; children: ReactNode }) {
+  const className =
+    type === "success" ? "alert-success" : type === "info" ? "alert-info" : "alert-error";
+  return <div className={cn("alert", className)}>{children}</div>;
 }
 
 export function LoadingState({ message = "Loading…" }: { message?: string }) {

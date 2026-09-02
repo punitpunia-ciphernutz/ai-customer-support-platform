@@ -2,14 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "@/services/api/client";
 import type { Conversation, Message } from "@/types";
 import { useSupportSocket } from "@/hooks/useSupportSocket";
+import { useAwaitingAiResponse } from "@/hooks/useAwaitingAiResponse";
+import { AiRespondingIndicator, MessageBubble } from "@/features/conversations/MessageBubble";
 import { Alert } from "@/components/ui";
 import { IconSupport } from "@/components/ui/icons";
-import { cn } from "@/utils/cn";
-
-function senderLabel(type: string) {
-  if (type === "AI") return "AI Support";
-  return type;
-}
 
 function isCustomerVisible(m: Message) {
   return !m.metadata?.internal;
@@ -26,6 +22,7 @@ export function WebChatPage() {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [ticketNotice, setTicketNotice] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const loadMessages = async (cid: string, custId: string) => {
@@ -35,6 +32,23 @@ export function WebChatPage() {
     );
     setMessages(list);
   };
+
+  const visibleMessages = messages.filter(isCustomerVisible);
+
+  const { sending, setSending, awaitingAi, ticketId } = useAwaitingAiResponse({
+    messages,
+    conversationId,
+    customerId,
+    enabled: !!conversationId && !!customerId,
+    onTicketCreated: (id) => {
+      setTicketNotice(`A support ticket was created (${id.slice(0, 8)}…). Our team will follow up soon.`);
+    },
+    onMessagesRefresh: () => {
+      if (conversationId && customerId) {
+        void loadMessages(conversationId, customerId);
+      }
+    },
+  });
 
   useEffect(() => {
     if (conversationId && customerId) {
@@ -57,12 +71,14 @@ export function WebChatPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, awaitingAi, sending]);
 
   const startOrSend = async () => {
     setError(null);
+    setTicketNotice(null);
     if (!customerId.trim() || !text.trim()) return;
     localStorage.setItem("chat_customer_id", customerId);
+    setSending(true);
     try {
       let cid = conversationId;
       if (!cid) {
@@ -82,7 +98,7 @@ export function WebChatPage() {
         await loadMessages(cid, customerId);
         return;
       }
-      await api(`/public/conversations/${cid}/messages`, {
+      await api<Message>(`/public/conversations/${cid}/messages`, {
         method: "POST",
         auth: false,
         body: JSON.stringify({ content: text, customer_id: customerId }),
@@ -91,6 +107,8 @@ export function WebChatPage() {
       await loadMessages(cid, customerId);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Send failed");
+    } finally {
+      setSending(false);
     }
   };
 
@@ -121,20 +139,25 @@ export function WebChatPage() {
         {loading && (
           <p className="text-muted text-sm" style={{ textAlign: "center" }}>Loading messages…</p>
         )}
-        {!loading && !messages.filter(isCustomerVisible).length && (
+        {!loading && !visibleMessages.length && !sending && (
           <p className="text-muted text-sm" style={{ textAlign: "center", margin: "auto" }}>
             Send a message to start the conversation.
           </p>
         )}
-        {messages.filter(isCustomerVisible).map((m) => (
-          <div key={m.id} className={cn("message-bubble", m.sender_type.toLowerCase())}>
-            <div className="message-sender">{senderLabel(m.sender_type)}</div>
-            {m.content}
-          </div>
+        {visibleMessages.map((m) => (
+          <MessageBubble key={m.id} message={m} />
         ))}
+        {sending && <AiRespondingIndicator />}
+        {!sending && awaitingAi && <AiRespondingIndicator />}
         <div ref={bottomRef} />
       </div>
 
+      {ticketNotice && <Alert type="info">{ticketNotice}</Alert>}
+      {ticketId && !ticketNotice && (
+        <Alert type="info">
+          A support ticket was created ({ticketId.slice(0, 8)}…). Our team will follow up soon.
+        </Alert>
+      )}
       {error && <Alert type="error">{error}</Alert>}
 
       <form
@@ -149,9 +172,14 @@ export function WebChatPage() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Hello, I need help…"
+          disabled={sending}
         />
-        <button type="submit" className="btn btn-primary" disabled={!text.trim() || !customerId.trim()}>
-          Send
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={!text.trim() || !customerId.trim() || sending}
+        >
+          {sending ? "Sending…" : "Send"}
         </button>
       </form>
 
@@ -163,6 +191,7 @@ export function WebChatPage() {
           setConversationId("");
           localStorage.removeItem("chat_conversation_id");
           setMessages([]);
+          setTicketNotice(null);
         }}
       >
         Start new conversation

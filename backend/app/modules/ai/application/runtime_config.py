@@ -26,6 +26,7 @@ class RuntimeAIConfig:
     multilingual_enabled: bool
     hybrid_keyword_weight: float
     missed_chat_timeout_minutes: int
+    ai_response_timeout_seconds: int
     allowed_intents: list[str] | None
     restricted_intents: list[str] | None
     intent_team_map: dict[str, str] | None
@@ -75,6 +76,7 @@ class RuntimeAIConfig:
             multilingual_enabled=pick("multilingual_enabled", base.multilingual_enabled),
             hybrid_keyword_weight=base.hybrid_keyword_weight,
             missed_chat_timeout_minutes=base.missed_chat_timeout_minutes,
+            ai_response_timeout_seconds=base.ai_response_timeout_seconds,
             allowed_intents=base.allowed_intents,
             restricted_intents=base.restricted_intents,
             intent_team_map=base.intent_team_map,

@@ -16,6 +16,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.workers.tasks.process_missed_chats",
         "schedule": 60.0,
     },
+    "process-ai-response-timeouts": {
+        "task": "app.workers.tasks.process_ai_response_timeouts",
+        "schedule": 30.0,
+    },
 }
 
 

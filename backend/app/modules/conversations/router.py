@@ -6,11 +6,13 @@ from app.infrastructure.database.models import Conversation, Message, User
 from app.infrastructure.database.session import get_db
 from app.modules.auth.permissions import CONVERSATIONS_READ, CONVERSATIONS_WRITE
 from app.modules.conversations.schemas import (
+    AIResponseStatusOut,
     ConversationCreate,
     ConversationOut,
     ConversationUpdate,
     MessageCreate,
     MessageOut,
+    PublicAIResponseCheck,
     PublicMessageCreate,
 )
 from app.modules.conversations.service import ConversationService
@@ -105,6 +107,37 @@ async def public_list_messages(
     db: AsyncSession = Depends(get_db),
 ) -> list[Message]:
     return await ConversationService(db).list_public_messages(conversation_id, customer_id)
+
+
+@router.post(
+    "/public/conversations/{conversation_id}/check-ai-response",
+    response_model=AIResponseStatusOut,
+)
+async def public_check_ai_response(
+    conversation_id: str,
+    body: PublicAIResponseCheck,
+    db: AsyncSession = Depends(get_db),
+) -> AIResponseStatusOut:
+    from app.modules.ai.application.ai_response_timeout_service import AIResponseTimeoutService
+
+    result = await AIResponseTimeoutService(db).check_or_escalate(
+        conversation_id,
+        body.customer_id,
+        message_id=body.message_id,
+    )
+    await db.commit()
+    return AIResponseStatusOut.model_validate(result)
+
+
+@router.get("/conversations/{conversation_id}/ai-usage")
+async def get_conversation_ai_usage(
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(CONVERSATIONS_READ)),
+):
+    from app.modules.ai.application.usage_service import AIUsageService
+
+    return await AIUsageService(db).get_conversation_summary(user.organization_id, conversation_id)
 
 
 @router.post("/conversations/{conversation_id}/takeover", response_model=ConversationOut)
