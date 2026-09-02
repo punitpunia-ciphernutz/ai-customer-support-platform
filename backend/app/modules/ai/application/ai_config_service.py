@@ -27,11 +27,7 @@ async def get_or_create_ai_config(db: AsyncSession, organization_id: str) -> AIC
         hybrid_keyword_weight=0.3,
         missed_chat_timeout_minutes=5,
         restricted_intents=["OTHER"],
-        intent_team_map={
-            "BILLING": "Billing",
-            "REFUND": "Billing",
-            "CANCELLATION": "Billing",
-        },
+        intent_team_map={},
     )
     db.add(config)
     await db.flush()

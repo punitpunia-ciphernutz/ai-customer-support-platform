@@ -88,6 +88,21 @@ def seed() -> None:
             session.add(agent)
             session.flush()
 
+        manager = session.scalar(select(User).where(User.email == "manager@example.com"))
+        if manager is None:
+            manager = User(
+                organization_id=org.id,
+                role_id=roles_by_name[RoleName.MANAGER].id,
+                email="manager@example.com",
+                full_name="Demo Manager",
+                hashed_password=hash_password(settings.seed_agent_password),
+                is_active=True,
+            )
+            session.add(manager)
+            session.flush()
+        else:
+            manager.role_id = roles_by_name[RoleName.MANAGER].id
+
         team = session.scalar(select(Team).where(Team.organization_id == org.id, Team.name == "Support"))
         if team is None:
             team = Team(organization_id=org.id, name="Support", description="Default support team")
@@ -102,6 +117,12 @@ def seed() -> None:
             billing_team = Team(organization_id=org.id, name="Billing", description="Billing support team")
             session.add(billing_team)
             session.flush()
+
+        billing_member = session.scalar(
+            select(TeamMember).where(TeamMember.team_id == billing_team.id, TeamMember.user_id == agent.id)
+        )
+        if billing_member is None:
+            session.add(TeamMember(team_id=billing_team.id, user_id=agent.id))
 
         ai_config = session.scalar(select(AIConfig).where(AIConfig.organization_id == org.id))
         if ai_config is None:
@@ -120,16 +141,13 @@ def seed() -> None:
                     business_hours=DEFAULT_BUSINESS_HOURS,
                     missed_chat_timeout_minutes=5,
                     restricted_intents=["OTHER"],
-                    intent_team_map={
-                        "BILLING": "Billing",
-                        "REFUND": "Billing",
-                        "CANCELLATION": "Billing",
-                    },
+                    intent_team_map={},
                 )
             )
         else:
             if ai_config.business_hours is None:
                 ai_config.business_hours = DEFAULT_BUSINESS_HOURS
+            ai_config.intent_team_map = {}
 
         for channel, mode in [
             (ChannelType.WEB_CHAT.value, AIMode.AUTO_REPLY),
@@ -153,15 +171,22 @@ def seed() -> None:
 
         availability = session.scalar(select(AgentAvailability).where(AgentAvailability.user_id == agent.id))
         if availability is None:
+            from app.modules.ai.domain.models import AgentStatus
+
             session.add(
                 AgentAvailability(
                     user_id=agent.id,
                     organization_id=org.id,
                     is_online=True,
+                    status=AgentStatus.ONLINE,
                     timezone="UTC",
                     schedule=DEFAULT_BUSINESS_HOURS["schedule"],
                 )
             )
+        else:
+            from app.modules.ai.domain.models import AgentStatus
+
+            availability.status = AgentStatus.ONLINE if availability.is_online else AgentStatus.OFFLINE
 
         _seed_prompts(session)
 
@@ -205,8 +230,37 @@ def seed() -> None:
                     )
                 )
 
+        from app.modules.notifications.domain.models import NotificationPreference
+        from app.modules.notifications.application.service import DEFAULT_EVENT_TYPES
+
+        for user_id in {agent.id, manager.id if manager else None} - {None}:
+            for event_type in DEFAULT_EVENT_TYPES:
+                existing = session.scalar(
+                    select(NotificationPreference).where(
+                        NotificationPreference.user_id == user_id,
+                        NotificationPreference.event_type == event_type,
+                    )
+                )
+                if existing is None:
+                    session.add(
+                        NotificationPreference(
+                            user_id=user_id,
+                            event_type=event_type,
+                            in_app=True,
+                            email=False,
+                            enabled=True,
+                        )
+                    )
+
         session.commit()
         print(f"Seeded org={org.id} agent={settings.seed_agent_email}")
+
+        from app.scripts.seed_day6 import seed_business_hours, seed_default_automations, seed_sla_policies
+
+        bh = seed_business_hours(session, org.id, org.timezone or "UTC")
+        seed_sla_policies(session, org.id, bh.id)
+        seed_default_automations(session, org.id)
+        session.commit()
 
 
 if __name__ == "__main__":

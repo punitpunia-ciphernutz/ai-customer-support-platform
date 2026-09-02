@@ -1,6 +1,10 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useAuth } from "@/features/auth/AuthContext";
 import { LoginPage } from "@/features/auth/LoginPage";
+import { AutomationFormPage } from "@/features/automations/AutomationFormPage";
+import { AutomationsPage } from "@/features/automations/AutomationsPage";
+import { AutomationDetailPage } from "@/features/automations/AutomationDetailPage";
+import { BusinessHoursPage } from "@/features/settings/BusinessHoursPage";
 import { ChannelsPage } from "@/features/channels/ChannelsPage";
 import { InboxPage } from "@/features/inbox/InboxPage";
 import { CustomerDetailPage } from "@/features/customers/CustomerDetailPage";
@@ -47,6 +51,11 @@ export function AppRouter() {
                 <Route path="/customers" element={<CustomersPage />} />
                 <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
                 <Route path="/app/customers/:customerId" element={<CustomerDetailPage />} />
+                <Route path="/automations" element={<AutomationsPage />} />
+                <Route path="/automations/new" element={<AutomationFormPage />} />
+                <Route path="/automations/:automationId/edit" element={<AutomationFormPage />} />
+                <Route path="/automations/:automationId" element={<AutomationDetailPage />} />
+                <Route path="/app/automations" element={<AutomationsPage />} />
                 <Route path="/channels" element={<ChannelsPage />} />
                 <Route path="/app/channels" element={<ChannelsPage />} />
                 <Route path="/knowledge" element={<KnowledgePage />} />
@@ -56,6 +65,7 @@ export function AppRouter() {
                 <Route path="/tickets" element={<TicketsPage />} />
                 <Route path="/teams" element={<TeamsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/settings/business-hours" element={<BusinessHoursPage />} />
                 <Route path="/settings/channels" element={<ChannelSettingsPage />} />
                 <Route path="/app/settings/channels" element={<ChannelSettingsPage />} />
               </Routes>

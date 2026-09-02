@@ -51,9 +51,9 @@ make up
 | Backend API + docs | http://localhost:8000/docs |
 | Health | http://localhost:8000/health |
 
-On backend start: `alembic upgrade head` (through **`0007_day5_omnichannel`**) + seed (prompts, bot configs, channel configs, evaluation baseline, business hours).
+On backend start: `alembic upgrade head` (through **`0008_day6_automation`**) + seed (prompts, bot configs, channel configs, evaluation baseline, business hours, default automations, SLA policies).
 
-**Important:** The **worker** service must run for async AI replies. The **beat** service runs missed-chat timeout processing every 60 seconds.
+**Important:** The **worker** service must run for async AI replies. The **beat** service runs missed-chat timeout processing every 60 seconds and **SLA breach checks** every 60 seconds.
 
 ## 3. Migrate / seed / test
 
@@ -88,6 +88,58 @@ docker compose exec backend pytest -q \
 ```
 
 Expected: **23/23 passed**
+
+Day 6 test suite (automation + routing — full):
+
+```bash
+docker compose exec backend alembic upgrade head
+docker compose exec backend python -m app.scripts.seed
+docker compose exec backend pytest -q \
+  tests/test_day6_phase1_models.py \
+  tests/test_day6_conditions.py \
+  tests/test_day6_business_hours.py \
+  tests/test_day6_assignment_round_robin.py \
+  tests/test_day6_acceptance.py \
+  tests/test_day6_actions.py \
+  tests/test_day6_execution_logs.py \
+  tests/test_day6_loop_protection.py \
+  tests/test_day6_idempotency.py \
+  tests/test_day6_availability.py \
+  tests/test_day6_missed_chat_delayed.py \
+  tests/test_day6_sla_timers.py \
+  tests/test_day6_notifications.py \
+  tests/test_day6_event_integration.py \
+  tests/test_day6_automation_api.py
+```
+
+Expected: **25/25 passed**
+
+Day 6 + Day 4/5 regression subset:
+
+```bash
+docker compose exec backend pytest -q \
+  tests/test_day6_phase1_models.py \
+  tests/test_day6_conditions.py \
+  tests/test_day6_business_hours.py \
+  tests/test_day6_assignment_round_robin.py \
+  tests/test_day6_acceptance.py \
+  tests/test_day6_actions.py \
+  tests/test_day6_execution_logs.py \
+  tests/test_day6_loop_protection.py \
+  tests/test_day6_idempotency.py \
+  tests/test_day6_availability.py \
+  tests/test_day6_missed_chat_delayed.py \
+  tests/test_day6_sla_timers.py \
+  tests/test_day6_notifications.py \
+  tests/test_day6_event_integration.py \
+  tests/test_day6_automation_api.py \
+  tests/test_day4_missed_chat.py \
+  tests/test_day4_takeover.py \
+  tests/test_day5_webhook_enabled.py \
+  tests/test_day5_phase1_models.py
+```
+
+Expected: **33/33 passed**
 
 Day 4 test suite (offline, recommended):
 
@@ -128,14 +180,49 @@ docker compose exec backend pytest -q tests/test_day3_agent.py
 5. **Channels** (`/channels` or `/app/channels`) — channel overview, enable/disable, AI mode per channel
 6. **Settings → Channel settings** (`/settings/channels`) — detailed email configuration
 7. **Customers** — list links to **Customer 360** at `/customers/:id`
+8. **Automations** (`/automations`) — list, **New automation**, enable/disable, detail + **execution steps**
+9. **Business hours** (`/settings/business-hours`) — editable weekly schedule, timezone, **holidays**
+10. **Inbox availability** — Online / Away / Offline dropdown in header
 
-## 5. Day 4 verification
+**Demo users:** agent `agent@example.com`, manager `manager@example.com` (password `agent123!`)
+
+## 5. Day 6 verification
 
 ### Migration check
 
 ```bash
 docker compose exec backend alembic current
-# Should show: 0007_day5_omnichannel (head)
+# Should show: 0008_day6_automation (head)
+```
+
+### List automations
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/automations
+```
+
+Expect seeded: Route Billing, Angry Customers, AI Escalation, Reopen on reply, Missed Chat.
+
+### Agent availability (status enum)
+
+```bash
+curl -s -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"status":"ONLINE"}' http://localhost:8000/api/v1/agents/me/availability
+```
+
+### Business hours
+
+```bash
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/business-hours
+```
+
+## 6. Day 4 verification
+
+### Migration check
+
+```bash
+docker compose exec backend alembic current
+# Should show: 0008_day6_automation (head)
 ```
 
 ### AI config (extended)
@@ -285,7 +372,7 @@ See previous sections for knowledge search, classification, inbox walkthrough.
 - **No AI reply**: worker running, `enabled=true`, `mode=AUTO_REPLY`, not `HUMAN_CONTROL`
 - **Duplicate replies**: idempotency via `processing_key`
 - **Evaluation fails with embedding errors**: run eval via Echo path (Settings button uses offline graph when no retrieval DB session in eval runner)
-- **Schema docs**: [`docs/database/day5-schema.md`](database/day5-schema.md), [`docs/database/day4-schema.md`](database/day4-schema.md)
+- **Schema docs**: [`docs/database/day6-schema.md`](database/day6-schema.md), [`docs/database/day5-schema.md`](database/day5-schema.md), [`docs/database/day4-schema.md`](database/day4-schema.md)
 
 ## 8. Non-Docker (optional)
 

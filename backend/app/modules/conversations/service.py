@@ -27,6 +27,7 @@ from app.infrastructure.database.models import (
 from app.infrastructure.events import DomainEvent, event_bus
 from app.modules.ai.tasks_bridge import enqueue_ai_message_processing
 from app.modules.auth.permissions import CONVERSATIONS_ASSIGN
+from app.modules.assignment.application.service import AssignmentService
 from app.modules.channels.idempotency import IdempotencyService
 from app.modules.conversations.channels import IncomingMessage, get_adapter
 from app.modules.conversations.email_threading import EmailThreadingService
@@ -34,6 +35,7 @@ from app.modules.conversations.events import message_delivered, message_failed, 
 from app.modules.conversations.normalizer import normalize_subject
 from app.modules.conversations.schemas import ConversationCreate, ConversationUpdate, MessageCreate
 from app.modules.channels.schemas import EmailSendRequest
+from app.modules.sla.application.service import SLAService
 
 
 class ConversationService:
@@ -153,6 +155,24 @@ class ConversationService:
         await self.db.flush()
         await self.db.refresh(conversation)
 
+        assignment = AssignmentService(self.db)
+        if old["assigned_user_id"] != conversation.assigned_user_id:
+            await assignment._adjust_active_count(old["assigned_user_id"], -1)  # noqa: SLF001
+            await assignment._adjust_active_count(conversation.assigned_user_id, 1)  # noqa: SLF001
+
+        sla = SLAService(self.db)
+        if old["priority"] != conversation.priority.value:
+            await sla.start_timers_for_conversation(
+                user.organization_id, conversation.id, conversation.priority
+            )
+        if old["status"] != ConversationStatus.CLOSED.value and conversation.status == ConversationStatus.CLOSED:
+            await sla.complete_resolution(conversation.id)
+            await assignment._adjust_active_count(conversation.assigned_user_id, -1)  # noqa: SLF001
+        elif old["status"] == ConversationStatus.CLOSED.value and conversation.status != ConversationStatus.CLOSED:
+            await sla.resume_timers(conversation.id)
+            if conversation.assigned_user_id:
+                await assignment._adjust_active_count(conversation.assigned_user_id, 1)  # noqa: SLF001
+
         new = {
             "status": conversation.status.value,
             "priority": conversation.priority.value,
@@ -176,6 +196,8 @@ class ConversationService:
                 old_value=old,
                 new_value=new,
             )
+        if old["status"] == ConversationStatus.CLOSED.value and new["status"] != ConversationStatus.CLOSED.value:
+            event_name = "conversation.reopened"
         if old["status"] != ConversationStatus.CLOSED.value and new["status"] == ConversationStatus.CLOSED.value:
             event_name = "conversation.closed"
             await write_audit(
@@ -242,7 +264,7 @@ class ConversationService:
         self, user: User, conversation_id: str, body: MessageCreate
     ) -> Message:
         conversation = await self.get_conversation(user.organization_id, conversation_id)
-        return await self._create_outbound_message(
+        message = await self._create_outbound_message(
             conversation=conversation,
             organization_id=user.organization_id,
             sender_type=body.sender_type,
@@ -250,6 +272,9 @@ class ConversationService:
             content=body.content,
             metadata=body.metadata,
         )
+        if body.sender_type == SenderType.AGENT:
+            await SLAService(self.db).complete_first_response(conversation_id)
+        return message
 
     async def send_email_reply(
         self, user: User, conversation_id: str, body: EmailSendRequest
@@ -366,6 +391,14 @@ class ConversationService:
                     },
                 )
             )
+            await SLAService(self.db).start_timers_for_conversation(
+                incoming.organization_id,
+                conversation.id,
+                conversation.priority,
+            )
+            from app.modules.ai.application.missed_chat_service import MissedChatService
+
+            await MissedChatService(self.db).schedule_check_if_needed(conversation.id, incoming.organization_id)
         elif subject and not conversation.subject:
             conversation.subject = subject
 
@@ -438,9 +471,20 @@ class ConversationService:
             metadata_=meta,
         )
         self.db.add(msg)
-        if conversation.status == ConversationStatus.CLOSED:
+        was_closed = conversation.status == ConversationStatus.CLOSED
+        if was_closed:
             conversation.status = ConversationStatus.OPEN
         await self.db.flush()
+
+        if was_closed:
+            await SLAService(self.db).resume_timers(conversation.id)
+            await event_bus.publish(
+                DomainEvent(
+                    name="conversation.reopened",
+                    organization_id=organization_id,
+                    payload={"conversation_id": conversation.id},
+                )
+            )
 
         attachment_ids = list(meta.pop("attachment_ids", []) or [])
         if attachment_ids:
@@ -547,9 +591,19 @@ class ConversationService:
             metadata_=incoming.metadata or {},
         )
         self.db.add(msg)
-        if conversation.status == ConversationStatus.CLOSED:
+        was_closed = conversation.status == ConversationStatus.CLOSED
+        if was_closed:
             conversation.status = ConversationStatus.OPEN
         await self.db.flush()
+        if was_closed:
+            await SLAService(self.db).resume_timers(conversation.id)
+            await event_bus.publish(
+                DomainEvent(
+                    name="conversation.reopened",
+                    organization_id=conversation.organization_id,
+                    payload={"conversation_id": conversation.id},
+                )
+            )
         await self.db.refresh(msg)
         await self._publish_message(msg, conversation)
         return msg
@@ -613,6 +667,14 @@ class ConversationService:
             await self.db.flush()
             await self._publish_message(msg, conversation)
         await self.db.refresh(conversation)
+        await SLAService(self.db).start_timers_for_conversation(
+            incoming.organization_id,
+            conversation.id,
+            conversation.priority,
+        )
+        from app.modules.ai.application.missed_chat_service import MissedChatService
+
+        await MissedChatService(self.db).schedule_check_if_needed(conversation.id, incoming.organization_id)
         await event_bus.publish(
             DomainEvent(
                 name="conversation.created",

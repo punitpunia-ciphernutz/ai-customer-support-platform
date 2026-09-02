@@ -8,6 +8,11 @@ from app.infrastructure.database.base import Base
 from app.infrastructure.database import models as _support_models  # noqa: F401
 from app.modules.knowledge.domain import models as _knowledge_models  # noqa: F401
 from app.modules.ai.domain import models as _ai_models  # noqa: F401
+from app.modules.automation.domain import models as _automation_models  # noqa: F401
+from app.modules.business_hours.domain import models as _business_hours_models  # noqa: F401
+from app.modules.notifications.domain import models as _notification_models  # noqa: F401
+from app.modules.sla.domain import models as _sla_models  # noqa: F401
+from app.modules.tags.domain import models as _tag_models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

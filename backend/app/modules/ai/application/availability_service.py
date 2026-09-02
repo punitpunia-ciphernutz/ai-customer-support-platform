@@ -8,7 +8,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.ai.application.ai_config_service import get_or_create_ai_config
-from app.modules.ai.domain.models import AgentAvailability
+from app.modules.ai.domain.models import AgentAvailability, AgentStatus
+from app.modules.business_hours.application.service import BusinessHoursService
 
 
 class AvailabilityService:
@@ -21,12 +22,26 @@ class AvailabilityService:
             .select_from(AgentAvailability)
             .where(
                 AgentAvailability.organization_id == organization_id,
+                AgentAvailability.status == AgentStatus.ONLINE,
+            )
+        )
+        if count and count > 0:
+            return True
+        # Legacy fallback
+        count = await self.db.scalar(
+            select(func.count())
+            .select_from(AgentAvailability)
+            .where(
+                AgentAvailability.organization_id == organization_id,
                 AgentAvailability.is_online.is_(True),
             )
         )
         return bool(count and count > 0)
 
     async def is_within_business_hours(self, organization_id: str) -> bool:
+        bh = BusinessHoursService(self.db)
+        if await bh.get_default(organization_id):
+            return await bh.is_open(organization_id)
         config = await get_or_create_ai_config(self.db, organization_id)
         hours = config.business_hours or {}
         schedule = hours.get("schedule") or {}
@@ -48,13 +63,24 @@ class AvailabilityService:
         )
         return list(result.scalars().all())
 
-    async def set_online(self, user_id: str, organization_id: str, is_online: bool) -> AgentAvailability:
+    async def set_status(
+        self,
+        user_id: str,
+        organization_id: str,
+        status: AgentStatus,
+    ) -> AgentAvailability:
         row = await self.db.scalar(select(AgentAvailability).where(AgentAvailability.user_id == user_id))
         if row is None:
-            row = AgentAvailability(user_id=user_id, organization_id=organization_id, is_online=is_online)
+            row = AgentAvailability(user_id=user_id, organization_id=organization_id, status=status)
             self.db.add(row)
         else:
-            row.is_online = is_online
+            row.status = status
+        row.is_online = status == AgentStatus.ONLINE
+        row.last_seen_at = datetime.now(timezone.utc)
         await self.db.flush()
         await self.db.refresh(row)
         return row
+
+    async def set_online(self, user_id: str, organization_id: str, is_online: bool) -> AgentAvailability:
+        status = AgentStatus.ONLINE if is_online else AgentStatus.OFFLINE
+        return await self.set_status(user_id, organization_id, status)

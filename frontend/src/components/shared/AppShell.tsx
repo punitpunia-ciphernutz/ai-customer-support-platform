@@ -21,6 +21,7 @@ const NAV = [
   { to: "/knowledge", label: "Knowledge", icon: IconBook },
   { to: "/tickets", label: "Tickets", icon: IconTicket },
   { to: "/teams", label: "Teams", icon: IconTeam },
+  { to: "/automations", label: "Automations", icon: IconSettings },
   { to: "/channels", label: "Channels", icon: IconSettings },
   { to: "/settings", label: "Settings", icon: IconSettings },
 ];

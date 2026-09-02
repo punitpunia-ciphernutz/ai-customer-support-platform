@@ -213,3 +213,55 @@ export const TICKET_STATUSES: TicketStatus[] = [
 ];
 
 export const PRIORITIES: Priority[] = ["LOW", "NORMAL", "HIGH", "URGENT"];
+
+export type AgentStatus = "ONLINE" | "AWAY" | "OFFLINE";
+
+export type AutomationSummary = {
+  id: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  trigger: { type: string };
+  conditions: Record<string, unknown> | null;
+  actions: { type: string; value?: unknown }[];
+  priority: number;
+  execution_count: number;
+};
+
+export type AutomationDetail = AutomationSummary;
+
+export type AutomationExecution = {
+  id: string;
+  automation_id: string;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  error: string | null;
+};
+
+export type BusinessHoursScheduleItem = {
+  day_of_week: number;
+  open_time: string | null;
+  close_time: string | null;
+  closed: boolean;
+};
+
+export type BusinessHoursConfig = {
+  id: string;
+  name: string;
+  timezone: string;
+  is_default: boolean;
+  schedule: BusinessHoursScheduleItem[];
+  holidays: { id?: string; date: string; name: string }[];
+};
+
+export type AutomationExecutionDetail = AutomationExecution & {
+  steps: {
+    id: string;
+    step_type: string;
+    status: string;
+    duration_ms: number | null;
+    result: Record<string, unknown> | null;
+    error: string | null;
+  }[];
+};

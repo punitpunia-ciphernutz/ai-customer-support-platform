@@ -221,7 +221,43 @@ class AIService:
             return existing
 
         _, run = await self.run_support_agent(msg.conversation_id, message_id, persist_side_effects=True)
+        if run is not None:
+            await self._emit_message_received(msg, conv, run)
         return run
+
+    async def _emit_message_received(self, msg: Message, conv: Conversation, run: AIRun) -> None:
+        from app.infrastructure.events import DomainEvent, event_bus
+
+        await event_bus.publish(
+            DomainEvent(
+                name="message.received",
+                organization_id=conv.organization_id,
+                payload={
+                    "message_id": msg.id,
+                    "conversation_id": conv.id,
+                    "customer_id": conv.customer_id,
+                    "channel": conv.channel.value if hasattr(conv.channel, "value") else str(conv.channel),
+                    "intent": run.intent,
+                    "sentiment": run.sentiment,
+                    "confidence": run.confidence,
+                },
+            )
+        )
+        if run.decision == "ESCALATE" or (run.confidence is not None and run.confidence < 0.5):
+            await event_bus.publish(
+                DomainEvent(
+                    name="ai.escalated" if run.decision == "ESCALATE" else "ai.low_confidence",
+                    organization_id=conv.organization_id,
+                    payload={
+                        "message_id": msg.id,
+                        "conversation_id": conv.id,
+                        "customer_id": conv.customer_id,
+                        "intent": run.intent,
+                        "sentiment": run.sentiment,
+                        "confidence": run.confidence,
+                    },
+                )
+            )
 
     async def _apply_side_effects(
         self,

@@ -225,20 +225,17 @@ class EscalationService:
         return ticket
 
     async def _resolve_team_id(
-        self, organization_id: str, state: SupportAgentState, intent_team_map: dict[str, str]
+        self, organization_id: str, state: SupportAgentState, intent_team_map: dict[str, str]  # noqa: ARG002
     ) -> str | None:
-        team_name = None
-        if state.intent:
-            team_name = intent_team_map.get(state.intent.value)
-        if not team_name:
-            team_name = "Support"
+        """Team routing is handled by automations — default escalations to Support."""
+        team_name = "Support"
         result = await self.db.execute(
             select(Team).where(Team.organization_id == organization_id, Team.name == team_name)
         )
         team = result.scalar_one_or_none()
         if team is None:
             fallback = await self.db.execute(
-                select(Team).where(Team.organization_id == organization_id, Team.name == "Support")
+                select(Team).where(Team.organization_id == organization_id).limit(1)
             )
             team = fallback.scalar_one_or_none()
         return team.id if team else None

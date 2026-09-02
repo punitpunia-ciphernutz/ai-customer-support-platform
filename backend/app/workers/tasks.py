@@ -155,3 +155,90 @@ def process_missed_chats() -> int:  # type: ignore[no-untyped-def]
 @celery_app.task(name="app.workers.tasks.process_ai_response_timeouts")
 def process_ai_response_timeouts() -> int:  # type: ignore[no-untyped-def]
     return run_async(_run_process_ai_response_timeouts)
+
+
+async def _run_check_missed_chat(conversation_id: str, organization_id: str) -> bool:
+    async with AsyncSessionLocal() as session:
+        from app.modules.ai.application.missed_chat_service import MissedChatService
+
+        try:
+            handled = await MissedChatService(session).check_conversation(conversation_id, organization_id)
+            await session.commit()
+            return handled
+        except Exception:
+            await session.rollback()
+            logger.exception("Missed chat check failed for conversation %s", conversation_id)
+            raise
+
+
+@celery_app.task(name="app.workers.tasks.check_missed_chat")
+def check_missed_chat(conversation_id: str, organization_id: str) -> bool:  # type: ignore[no-untyped-def]
+    return run_async(lambda: _run_check_missed_chat(conversation_id, organization_id))
+
+
+async def _run_process_sla_breaches() -> int:
+    async with AsyncSessionLocal() as session:
+        from app.infrastructure.database.models import Organization
+        from app.modules.sla.application.service import SLAService
+
+        try:
+            org_ids = list((await session.execute(select(Organization.id))).scalars().all())
+            total = 0
+            for org_id in org_ids:
+                total += await SLAService(session).check_breaches(org_id)
+            await session.commit()
+            return total
+        except Exception:
+            await session.rollback()
+            logger.exception("SLA breach processing failed")
+            raise
+
+
+@celery_app.task(name="app.workers.tasks.process_sla_breaches")
+def process_sla_breaches() -> int:  # type: ignore[no-untyped-def]
+    return run_async(_run_process_sla_breaches)
+
+
+async def _run_execute_automation_event(
+    organization_id: str,
+    event_name: str,
+    payload: dict,
+    execution_depth: int = 0,
+    trigger_event_id: str | None = None,
+) -> int:
+    async with AsyncSessionLocal() as session:
+        from app.modules.automation.application.execution_service import ExecutionService
+
+        try:
+            results = await ExecutionService(session).execute_for_event(
+                organization_id=organization_id,
+                event_name=event_name,
+                payload=payload,
+                execution_depth=execution_depth,
+                trigger_event_id=trigger_event_id,
+            )
+            await session.commit()
+            return len(results)
+        except Exception:
+            await session.rollback()
+            logger.exception("Automation execution task failed for %s", event_name)
+            raise
+
+
+@celery_app.task(name="app.workers.tasks.execute_automation_event")
+def execute_automation_event(  # type: ignore[no-untyped-def]
+    organization_id: str,
+    event_name: str,
+    payload: dict,
+    execution_depth: int = 0,
+    trigger_event_id: str | None = None,
+) -> int:
+    return run_async(
+        lambda: _run_execute_automation_event(
+            organization_id,
+            event_name,
+            payload,
+            execution_depth,
+            trigger_event_id,
+        )
+    )

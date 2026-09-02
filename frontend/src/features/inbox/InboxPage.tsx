@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/services/api/client";
 import { Link, useSearchParams } from "react-router-dom";
 import type { ChannelType, Conversation, Customer, Message, UserListItem } from "@/types";
-import { useAuth } from "@/features/auth/AuthContext";
+import { AgentAvailabilityControl } from "@/features/agents/AgentAvailabilityControl";
 import { AiRespondingIndicator, MessageBubble } from "@/features/conversations/MessageBubble";
 import { useSupportSocket } from "@/hooks/useSupportSocket";
 import { useInboxAwaitingAi } from "@/hooks/useAwaitingAiResponse";
@@ -215,7 +215,9 @@ export function InboxPage() {
             Manage conversations, assign agents, and reply to customers.
           </p>
         </div>
-        <div className="filter-pills">
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+          <AgentAvailabilityControl />
+          <div className="filter-pills">
           {(["all", "mine", "unassigned", "web_chat", "email"] as View[]).map((v) => (
             <button
               key={v}
@@ -226,6 +228,7 @@ export function InboxPage() {
               {VIEW_LABELS[v]}
             </button>
           ))}
+          </div>
         </div>
       </div>
 

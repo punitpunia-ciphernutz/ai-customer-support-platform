@@ -49,6 +49,12 @@ class SentimentLabel(StrEnum):
     ANGRY = "ANGRY"
 
 
+class AgentStatus(StrEnum):
+    ONLINE = "ONLINE"
+    AWAY = "AWAY"
+    OFFLINE = "OFFLINE"
+
+
 class EvaluationBehavior(StrEnum):
     ANSWER = "ANSWER"
     ESCALATE = "ESCALATE"
@@ -214,6 +220,11 @@ class AgentAvailability(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
     is_online: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    status: Mapped[AgentStatus] = mapped_column(
+        Enum(AgentStatus, name="agent_status"), default=AgentStatus.OFFLINE, nullable=False
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    active_conversation_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     schedule: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     timezone: Mapped[str] = mapped_column(String(64), default="UTC", nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

@@ -14,6 +14,7 @@ from app.api.router import api_router
 from app.config import get_settings
 from app.infrastructure.events import event_bus
 from app.infrastructure.logging import bind_request_context, configure_logging
+from app.modules.automation.application.event_handler import register_automation_handlers
 from app.modules.inbox.ws import ensure_listener_started, router as ws_router
 
 
@@ -42,6 +43,7 @@ def _setup_otel(app: FastAPI) -> None:
 async def lifespan(_app: FastAPI):
     configure_logging()
     await event_bus.connect()
+    await register_automation_handlers()
     ensure_listener_started()
     yield
     await event_bus.close()
