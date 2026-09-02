@@ -4,6 +4,7 @@ import { api, ApiError } from "@/services/api/client";
 import { Link, useSearchParams } from "react-router-dom";
 import type { ChannelType, Conversation, Customer, Message, UserListItem } from "@/types";
 import { AgentAvailabilityControl } from "@/features/agents/AgentAvailabilityControl";
+import { useAuth } from "@/features/auth/AuthContext";
 import { AiRespondingIndicator, MessageBubble } from "@/features/conversations/MessageBubble";
 import { useSupportSocket } from "@/hooks/useSupportSocket";
 import { useInboxAwaitingAi } from "@/hooks/useAwaitingAiResponse";
@@ -120,9 +121,14 @@ export function InboxPage() {
   }, [messages.data]);
 
   const latestSuggestion = useMemo(() => {
-    return (messages.data ?? []).findLast(
-      (m) => m.metadata?.suggestion && m.metadata?.suggestion_status === "generated"
-    );
+    const list = messages.data ?? [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const m = list[i];
+      if (m.metadata?.suggestion && m.metadata?.suggestion_status === "generated") {
+        return m;
+      }
+    }
+    return undefined;
   }, [messages.data]);
 
   const takeover = useMutation({
