@@ -3,7 +3,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_permission
@@ -70,7 +70,12 @@ async def get_automation(
     automation = await AutomationService(db).get(user.organization_id, automation_id)
     if automation is None:
         raise HTTPException(status_code=404, detail="Automation not found")
-    return _automation_out(automation)
+    count = await db.scalar(
+        select(func.count())
+        .select_from(AutomationExecution)
+        .where(AutomationExecution.automation_id == automation_id)
+    )
+    return _automation_out(automation, int(count or 0))
 
 
 @router.patch("/{automation_id}", response_model=AutomationOut)

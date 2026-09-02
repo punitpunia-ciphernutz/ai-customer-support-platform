@@ -5,30 +5,16 @@ import { api, ApiError } from "@/services/api/client";
 import { Alert, LoadingState, PageHeader } from "@/components/ui";
 import { IconChevronLeft } from "@/components/ui/icons";
 import type { AutomationDetail } from "@/types";
-
-const TRIGGERS = [
-  "MESSAGE_RECEIVED",
-  "CONVERSATION_CREATED",
-  "CONVERSATION_ASSIGNED",
-  "CONVERSATION_REOPENED",
-  "CONVERSATION_CLOSED",
-  "AI_ESCALATED",
-  "MISSED_CHAT",
-];
-
-const ACTIONS = [
-  "ASSIGN_TEAM",
-  "ASSIGN_USER",
-  "ASSIGN_ROUND_ROBIN",
-  "SET_PRIORITY",
-  "SET_STATUS",
-  "ADD_TAG",
-  "REMOVE_TAG",
-  "CREATE_TICKET",
-  "NOTIFY_TEAM",
-  "NOTIFY_MANAGER",
-  "NOTIFY_AGENT",
-];
+import { ActionEditor, parseActions, serializeActions } from "./ActionEditor";
+import { ConditionBuilder } from "./ConditionBuilder";
+import { parseConditions, serializeConditions } from "./conditionUtils";
+import {
+  AUTOMATION_TRIGGERS,
+  formatEnumLabel,
+  getDefaultAction,
+  type ActionFormState,
+  type ConditionGroup,
+} from "./types";
 
 export function AutomationFormPage() {
   const { automationId } = useParams();
@@ -46,9 +32,10 @@ export function AutomationFormPage() {
   const [description, setDescription] = useState("");
   const [triggerType, setTriggerType] = useState("MESSAGE_RECEIVED");
   const [priority, setPriority] = useState(10);
-  const [conditionsJson, setConditionsJson] = useState("");
-  const [actionType, setActionType] = useState("SET_PRIORITY");
-  const [actionValue, setActionValue] = useState("HIGH");
+  const [enabled, setEnabled] = useState(true);
+  const [conditions, setConditions] = useState<ConditionGroup | null>(null);
+  const [conditionsUnsupported, setConditionsUnsupported] = useState(false);
+  const [actions, setActions] = useState<ActionFormState[]>([getDefaultAction()]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -58,28 +45,23 @@ export function AutomationFormPage() {
       setDescription(a.description ?? "");
       setTriggerType(a.trigger?.type ?? "MESSAGE_RECEIVED");
       setPriority(a.priority);
-      setConditionsJson(a.conditions ? JSON.stringify(a.conditions, null, 2) : "");
-      const first = a.actions?.[0];
-      if (first) {
-        setActionType(first.type);
-        setActionValue(first.value != null ? String(first.value) : "");
-      }
+      setEnabled(a.enabled);
+      const parsed = parseConditions(a.conditions);
+      setConditions(parsed.group);
+      setConditionsUnsupported(parsed.unsupported);
+      setActions(parseActions(a.actions ?? []));
     }
   }, [existing.data]);
 
   const save = useMutation({
     mutationFn: async () => {
-      let conditions = null;
-      if (conditionsJson.trim()) {
-        conditions = JSON.parse(conditionsJson);
-      }
       const body = {
         name: name.trim(),
         description: description.trim() || null,
-        enabled: true,
+        enabled,
         trigger: { type: triggerType },
-        conditions,
-        actions: [{ type: actionType, value: actionValue.trim() || undefined }],
+        conditions: serializeConditions(conditions),
+        actions: serializeActions(actions),
         priority,
       };
       if (isEdit) {
@@ -89,6 +71,9 @@ export function AutomationFormPage() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["automations"] });
+      if (isEdit) {
+        void qc.invalidateQueries({ queryKey: ["automation", automationId] });
+      }
       void navigate(isEdit ? `/automations/${automationId}` : "/automations");
     },
     onError: (e) => setError(e instanceof ApiError ? e.message : "Save failed"),
@@ -117,6 +102,10 @@ export function AutomationFormPage() {
           e.preventDefault();
           if (!name.trim()) {
             setError("Name is required.");
+            return;
+          }
+          if (!actions.length) {
+            setError("At least one action is required.");
             return;
           }
           setError(null);
@@ -176,9 +165,9 @@ export function AutomationFormPage() {
               value={triggerType}
               onChange={(e) => setTriggerType(e.target.value)}
             >
-              {TRIGGERS.map((t) => (
+              {AUTOMATION_TRIGGERS.map((t) => (
                 <option key={t} value={t}>
-                  {t.replace(/_/g, " ")}
+                  {formatEnumLabel(t)}
                 </option>
               ))}
             </select>
@@ -186,52 +175,26 @@ export function AutomationFormPage() {
         </div>
 
         <div className="form-field">
-          <label className="form-label" htmlFor="automation-conditions">
-            IF — conditions (JSON, optional)
-          </label>
-          <textarea
-            id="automation-conditions"
-            className="form-textarea"
-            rows={6}
-            value={conditionsJson}
-            onChange={(e) => setConditionsJson(e.target.value)}
-            placeholder='{"logic":"AND","conditions":[{"field":"intent","operator":"EQUALS","value":"BILLING"}]}'
-          />
-          <span className="form-hint">Leave empty to always run when the trigger fires.</span>
-        </div>
-
-        <div className="grid-2">
-          <div className="form-field">
-            <label className="form-label" htmlFor="automation-action">
-              THEN — action
-            </label>
-            <select
-              id="automation-action"
-              className="form-select"
-              value={actionType}
-              onChange={(e) => setActionType(e.target.value)}
-            >
-              {ACTIONS.map((t) => (
-                <option key={t} value={t}>
-                  {t.replace(/_/g, " ")}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-field">
-            <label className="form-label" htmlFor="automation-action-value">
-              Action value
-            </label>
+          <label className="form-label" htmlFor="automation-enabled">
             <input
-              id="automation-action-value"
-              className="form-input"
-              value={actionValue}
-              onChange={(e) => setActionValue(e.target.value)}
-              placeholder="Team name, priority, tag, …"
+              id="automation-enabled"
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+              style={{ marginRight: "0.5rem" }}
             />
-          </div>
+            Enabled
+          </label>
+          <span className="form-hint">Disabled automations will not run.</span>
         </div>
+
+        <ConditionBuilder
+          value={conditions}
+          onChange={setConditions}
+          unsupportedHint={conditionsUnsupported}
+        />
+
+        <ActionEditor value={actions} onChange={setActions} />
 
         <div className="flex items-center gap-2 mt-4">
           <button type="submit" className="btn btn-primary" disabled={save.isPending}>

@@ -1,8 +1,13 @@
 from celery import Celery
 
 from app.config import get_settings
+from app.modules.automation.application.event_handler import register_automation_handlers
 
 settings = get_settings()
+
+# Celery workers process AI messages and emit domain events — handlers must be
+# registered here, not only in the FastAPI lifespan.
+register_automation_handlers()
 
 celery_app = Celery(
     "support_platform",

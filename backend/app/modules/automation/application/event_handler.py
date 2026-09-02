@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-from typing import Any
 
 from app.infrastructure.database.session import AsyncSessionLocal
 from app.infrastructure.events import DomainEvent, event_bus
@@ -35,28 +32,10 @@ async def handle_domain_event(event: DomainEvent) -> None:
             logger.exception("Automation handler failed for %s", event.name)
 
 
-def _wrap_local_handler(message: dict[str, Any]) -> None:
-    event = DomainEvent(
-        name=message["name"],
-        payload=message.get("payload") or {},
-        organization_id=message.get("organization_id"),
-        event_id=message.get("event_id", ""),
-        created_at=message.get("created_at", ""),
-    )
-    asyncio.create_task(handle_domain_event(event))
-
-
-async def register_automation_handlers() -> None:
+def register_automation_handlers() -> None:
+    """Register automation execution on every published domain event."""
     global _handler_started
     if _handler_started:
         return
     _handler_started = True
-
-    original_publish = event_bus.publish
-
-    async def publish_with_handlers(event: DomainEvent) -> None:
-        await original_publish(event)
-        if event.organization_id:
-            await handle_domain_event(event)
-
-    event_bus.publish = publish_with_handlers  # type: ignore[method-assign]
+    event_bus.subscribe(handle_domain_event)

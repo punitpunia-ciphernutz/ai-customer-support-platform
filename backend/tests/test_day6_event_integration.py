@@ -14,7 +14,7 @@ from app.modules.conversations.service import ConversationService
 
 @pytest.mark.asyncio
 async def test_conversation_created_triggers_automation() -> None:
-    await register_automation_handlers()
+    register_automation_handlers()
     async with AsyncSessionLocal() as session:
         org_id = (await session.execute(select(Organization.id).limit(1))).scalar_one()
         user = (await session.execute(select(User).limit(1))).scalar_one()

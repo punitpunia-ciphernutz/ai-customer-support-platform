@@ -1,3 +1,5 @@
+import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -6,6 +8,10 @@ from uuid import uuid4
 import redis.asyncio as redis
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
+
+EventHandler = Callable[["DomainEvent"], Awaitable[None]]
 
 
 @dataclass
@@ -24,6 +30,7 @@ class EventBus:
 
     def __init__(self) -> None:
         self._redis: redis.Redis | None = None
+        self._handlers: list[EventHandler] = []
 
     async def connect(self) -> None:
         if self._redis is None:
@@ -39,13 +46,22 @@ class EventBus:
             await self._redis.aclose()
             self._redis = None
 
+    def subscribe(self, handler: EventHandler) -> None:
+        if handler not in self._handlers:
+            self._handlers.append(handler)
+
     async def publish(self, event: DomainEvent) -> None:
         await self.connect()
-        if self._redis is None:
-            return
-        import json
+        if self._redis is not None:
+            import json
 
-        await self._redis.publish(self.CHANNEL, json.dumps(asdict(event)))
+            await self._redis.publish(self.CHANNEL, json.dumps(asdict(event)))
+
+        for handler in self._handlers:
+            try:
+                await handler(event)
+            except Exception:
+                logger.exception("Event handler failed for %s", event.name)
 
 
 event_bus = EventBus()

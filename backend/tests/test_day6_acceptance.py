@@ -22,7 +22,7 @@ from app.modules.sla.domain.models import SLATimer
 async def test_day6_billing_message_triggers_automation() -> None:
     from app.modules.automation.application.event_handler import register_automation_handlers
 
-    await register_automation_handlers()
+    register_automation_handlers()
     async with AsyncSessionLocal() as session:
         org_id = (await session.execute(select(Organization.id).limit(1))).scalar_one()
         user = (await session.execute(select(User).limit(1))).scalar_one()
@@ -94,7 +94,7 @@ async def test_day6_billing_message_triggers_automation() -> None:
 async def test_day6_angry_message_notifies_manager() -> None:
     from app.modules.automation.application.event_handler import register_automation_handlers
 
-    await register_automation_handlers()
+    register_automation_handlers()
     async with AsyncSessionLocal() as session:
         org_id = (await session.execute(select(Organization.id).limit(1))).scalar_one()
         user = (await session.execute(select(User).limit(1))).scalar_one()
