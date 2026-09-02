@@ -35,3 +35,34 @@ class CustomerOut(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True, "populate_by_name": True}
+
+
+class Customer360Conversation(BaseModel):
+    id: str
+    channel: str
+    subject: str | None
+    status: str
+    updated_at: datetime
+
+
+class Customer360Ticket(BaseModel):
+    id: str
+    status: str
+    priority: str
+    source: str
+    created_at: datetime
+
+
+class Customer360TimelineItem(BaseModel):
+    id: str
+    type: str
+    channel: str | None
+    content: str
+    created_at: datetime
+
+
+class Customer360Out(BaseModel):
+    customer: CustomerOut
+    conversations: list[Customer360Conversation]
+    tickets: list[Customer360Ticket]
+    timeline: list[Customer360TimelineItem]

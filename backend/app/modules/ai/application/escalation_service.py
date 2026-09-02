@@ -184,20 +184,32 @@ class EscalationService:
                 "Thanks for your patience. I'm connecting you with a member of our support team "
                 "who can help you further."
             )
-            handoff_msg = Message(
-                conversation_id=state.conversation_id,
-                sender_type=SenderType.AI,
-                sender_id=None,
-                content=handoff,
-                metadata_={
-                    "ai_run_id": ai_run_id,
-                    "escalation": True,
-                    "internal": False,
-                },
-            )
-            self.db.add(handoff_msg)
-            await self.db.flush()
-            await self.conversations._publish_message(handoff_msg, conversation)  # noqa: SLF001
+            if (conversation.channel.value if hasattr(conversation.channel, "value") else str(conversation.channel)) == "EMAIL":
+                await self.conversations.send_ai_reply(
+                    state.conversation_id or "",
+                    handoff,
+                    {
+                        "ai_run_id": ai_run_id,
+                        "escalation": True,
+                        "internal": False,
+                    },
+                )
+            else:
+                handoff_msg = Message(
+                    conversation_id=state.conversation_id,
+                    sender_type=SenderType.AI,
+                    sender_id=None,
+                    content=handoff,
+                    channel=conversation.channel,
+                    metadata_={
+                        "ai_run_id": ai_run_id,
+                        "escalation": True,
+                        "internal": False,
+                    },
+                )
+                self.db.add(handoff_msg)
+                await self.db.flush()
+                await self.conversations._publish_message(handoff_msg, conversation)  # noqa: SLF001
 
         await event_bus.publish(
             DomainEvent(

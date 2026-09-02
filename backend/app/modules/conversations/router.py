@@ -5,6 +5,7 @@ from app.api.deps import require_permission
 from app.infrastructure.database.models import Conversation, Message, User
 from app.infrastructure.database.session import get_db
 from app.modules.auth.permissions import CONVERSATIONS_READ, CONVERSATIONS_WRITE
+from app.modules.channels.schemas import EmailSendRequest
 from app.modules.conversations.schemas import (
     AIResponseStatusOut,
     ConversationCreate,
@@ -64,6 +65,16 @@ async def list_messages(
     user: User = Depends(require_permission(CONVERSATIONS_READ)),
 ) -> list[Message]:
     return await ConversationService(db).list_messages(user.organization_id, conversation_id)
+
+
+@router.post("/conversations/{conversation_id}/email", response_model=MessageOut, status_code=201)
+async def send_email(
+    conversation_id: str,
+    body: EmailSendRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
+) -> Message:
+    return await ConversationService(db).send_email_reply(user, conversation_id, body)
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=MessageOut, status_code=201)

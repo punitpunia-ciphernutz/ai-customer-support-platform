@@ -8,7 +8,7 @@ from app.infrastructure.database.models import ActorType, Customer, User
 from app.infrastructure.database.session import get_db
 from app.infrastructure.events import DomainEvent, event_bus
 from app.modules.auth.permissions import CUSTOMERS_READ, CUSTOMERS_WRITE
-from app.modules.customers.schemas import CustomerCreate, CustomerOut, CustomerUpdate
+from app.modules.customers.schemas import CustomerCreate, CustomerOut, CustomerUpdate, Customer360Out
 
 router = APIRouter(prefix="/customers", tags=["customers"])
 
@@ -24,6 +24,84 @@ async def list_customers(
         .order_by(Customer.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+@router.get("/{customer_id}/360", response_model=Customer360Out)
+async def get_customer_360(
+    customer_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(CUSTOMERS_READ)),
+) -> Customer360Out:
+    from app.infrastructure.database.models import Conversation, Message, Ticket
+
+    customer = await _get_org_customer(db, user.organization_id, customer_id)
+    convs = (
+        await db.execute(
+            select(Conversation)
+            .where(
+                Conversation.organization_id == user.organization_id,
+                Conversation.customer_id == customer_id,
+            )
+            .order_by(Conversation.updated_at.desc())
+        )
+    ).scalars().all()
+    tickets = (
+        await db.execute(
+            select(Ticket)
+            .where(
+                Ticket.organization_id == user.organization_id,
+                Ticket.customer_id == customer_id,
+            )
+            .order_by(Ticket.created_at.desc())
+        )
+    ).scalars().all()
+    conv_ids = [c.id for c in convs]
+    timeline: list[dict] = []
+    if conv_ids:
+        msgs = (
+            await db.execute(
+                select(Message)
+                .where(Message.conversation_id.in_(conv_ids))
+                .order_by(Message.created_at.desc())
+                .limit(50)
+            )
+        ).scalars().all()
+        conv_by_id = {c.id: c for c in convs}
+        for m in msgs:
+            conv = conv_by_id.get(m.conversation_id)
+            timeline.append(
+                {
+                    "id": m.id,
+                    "type": m.sender_type.value,
+                    "channel": (m.channel or conv.channel).value if conv else None,
+                    "content": m.content[:200],
+                    "created_at": m.created_at,
+                }
+            )
+    return Customer360Out(
+        customer=CustomerOut.model_validate(customer),
+        conversations=[
+            {
+                "id": c.id,
+                "channel": c.channel.value,
+                "subject": c.subject,
+                "status": c.status.value,
+                "updated_at": c.updated_at,
+            }
+            for c in convs
+        ],
+        tickets=[
+            {
+                "id": t.id,
+                "status": t.status.value,
+                "priority": t.priority.value,
+                "source": t.source.value,
+                "created_at": t.created_at,
+            }
+            for t in tickets
+        ],
+        timeline=timeline,
+    )
 
 
 @router.get("/{customer_id}", response_model=CustomerOut)

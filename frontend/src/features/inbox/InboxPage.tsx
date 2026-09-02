@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/services/api/client";
 import { Link, useSearchParams } from "react-router-dom";
-import type { Conversation, Customer, Message, UserListItem } from "@/types";
+import type { ChannelType, Conversation, Customer, Message, UserListItem } from "@/types";
 import { useAuth } from "@/features/auth/AuthContext";
 import { AiRespondingIndicator, MessageBubble } from "@/features/conversations/MessageBubble";
 import { useSupportSocket } from "@/hooks/useSupportSocket";
@@ -12,13 +12,21 @@ import { cn } from "@/utils/cn";
 import { formatCost, statusClass } from "@/utils/format";
 import type { AIUsageSummary } from "@/types";
 
-type View = "all" | "mine" | "unassigned" | "team";
+type View = "all" | "mine" | "unassigned" | "team" | "web_chat" | "email";
 
 const VIEW_LABELS: Record<View, string> = {
   all: "All",
   mine: "Mine",
   unassigned: "Unassigned",
   team: "Team",
+  web_chat: "Web Chat",
+  email: "Email",
+};
+
+const CHANNEL_BADGE: Record<ChannelType, string> = {
+  WEB_CHAT: "Web Chat",
+  EMAIL: "Email",
+  FORM: "Form",
 };
 
 export function InboxPage() {
@@ -28,6 +36,7 @@ export function InboxPage() {
   const [view, setView] = useState<View>("all");
   const [selectedId, setSelectedId] = useState<string | null>(deepLinkId);
   const [reply, setReply] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
   const [aiPanelOpen, setAiPanelOpen] = useState(true);
   const qc = useQueryClient();
 
@@ -144,13 +153,24 @@ export function InboxPage() {
   });
 
   const sendReply = useMutation({
-    mutationFn: () =>
-      api<Message>(`/conversations/${selectedId}/messages`, {
+    mutationFn: () => {
+      if (selected?.channel === "EMAIL") {
+        return api<Message>(`/conversations/${selectedId}/email`, {
+          method: "POST",
+          body: JSON.stringify({
+            content: reply,
+            subject: emailSubject || undefined,
+          }),
+        });
+      }
+      return api<Message>(`/conversations/${selectedId}/messages`, {
         method: "POST",
         body: JSON.stringify({ content: reply, sender_type: "AGENT" }),
-      }),
+      });
+    },
     onSuccess: () => {
       setReply("");
+      setEmailSubject("");
       void qc.invalidateQueries({ queryKey: ["messages", selectedId] });
       void qc.invalidateQueries({ queryKey: ["conversations"] });
     },
@@ -193,7 +213,7 @@ export function InboxPage() {
           </p>
         </div>
         <div className="filter-pills">
-          {(["all", "mine", "unassigned", "team"] as View[]).map((v) => (
+          {(["all", "mine", "unassigned", "web_chat", "email"] as View[]).map((v) => (
             <button
               key={v}
               type="button"
@@ -233,8 +253,9 @@ export function InboxPage() {
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div className="list-item-title">{customerName(c.customer_id)}</div>
                   <div className="list-item-meta">
+                    <span className={statusClass("pending")}>{CHANNEL_BADGE[c.channel]}</span>
                     <span className={statusClass(c.status.toLowerCase())}>{c.status}</span>
-                    <span className={statusClass(c.priority.toLowerCase())}>{c.priority}</span>
+                    {c.subject && <span>{c.subject}</span>}
                   </div>
                 </div>
               </div>
@@ -256,7 +277,11 @@ export function InboxPage() {
                       {customerName(selected.customer_id)}
                     </h2>
                     <p className="text-sm text-muted" style={{ margin: "0.125rem 0 0" }}>
-                      {selected.channel.replace(/_/g, " ")} · {selected.subject ?? "No subject"}
+                      <span className={statusClass("pending")}>{CHANNEL_BADGE[selected.channel]}</span>
+                      {" · "}
+                      {selected.subject ?? "No subject"}
+                      {" · "}
+                      <Link to={`/customers/${selected.customer_id}`}>Customer 360</Link>
                     </p>
                   </div>
                 </div>
@@ -410,6 +435,9 @@ export function InboxPage() {
                       className="btn btn-primary btn-sm"
                       onClick={() => {
                         setReply(latestSuggestion.content);
+                        if (selected?.channel === "EMAIL") {
+                          setEmailSubject(selected.subject ? `Re: ${selected.subject.replace(/^Re:\s*/i, "")}` : "Re: Support");
+                        }
                         acceptSuggestion.mutate(latestSuggestion.id);
                       }}
                     >
@@ -453,18 +481,27 @@ export function InboxPage() {
                   if (reply.trim()) sendReply.mutate();
                 }}
               >
+                {selected.channel === "EMAIL" && (
+                  <input
+                    className="form-input"
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                    placeholder={`Subject (Re: ${selected.subject ?? "Support"})`}
+                    style={{ marginBottom: "0.5rem" }}
+                  />
+                )}
                 <input
                   className="form-input"
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}
-                  placeholder="Reply to customer…"
+                  placeholder={selected.channel === "EMAIL" ? "Reply via email…" : "Reply to customer…"}
                 />
                 <button
                   type="submit"
                   className="btn btn-primary"
                   disabled={!reply.trim() || sendReply.isPending}
                 >
-                  Reply
+                  {selected.channel === "EMAIL" ? "Send Email" : "Reply"}
                 </button>
               </form>
             </>

@@ -336,21 +336,28 @@ class AIService:
 
         conversations = ConversationService(self.db)
         conv = await conversations.get_conversation_by_id(state.conversation_id or "")
+        metadata = {
+            "ai_run_id": run.id,
+            "trigger_message_id": state.message_id,
+            "confidence": response.confidence,
+            "intent": response.intent.value,
+            "grounded": response.grounded,
+            "citations": [c.model_dump() for c in response.citations],
+            "ai_status": "AI Resolved",
+            "estimated_cost_usd": run.estimated_cost_usd,
+        }
+        channel = conv.channel
+        channel_value = channel.value if hasattr(channel, "value") else str(channel)
+        if channel_value == "EMAIL":
+            return await conversations.send_ai_reply(state.conversation_id or "", response.answer, metadata)
+
         msg = Message(
             conversation_id=state.conversation_id,
             sender_type=SenderType.AI,
             sender_id=None,
             content=response.answer,
-            metadata_={
-                "ai_run_id": run.id,
-                "trigger_message_id": state.message_id,
-                "confidence": response.confidence,
-                "intent": response.intent.value,
-                "grounded": response.grounded,
-                "citations": [c.model_dump() for c in response.citations],
-                "ai_status": "AI Resolved",
-                "estimated_cost_usd": run.estimated_cost_usd,
-            },
+            channel=conv.channel,
+            metadata_=metadata,
         )
         self.db.add(msg)
         await self.db.flush()

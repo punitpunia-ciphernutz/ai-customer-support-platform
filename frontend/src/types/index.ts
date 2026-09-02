@@ -4,7 +4,7 @@ export type ChannelType = "WEB_CHAT" | "EMAIL" | "FORM";
 export type ConversationStatus = "OPEN" | "PENDING" | "WAITING_FOR_AGENT" | "CLOSED";
 export type AIControlMode = "AI_CONTROL" | "HUMAN_CONTROL";
 export type Priority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
-export type SenderType = "CUSTOMER" | "AGENT" | "AI" | "SYSTEM";
+export type DeliveryStatus = "QUEUED" | "SENDING" | "SENT" | "DELIVERED" | "OPENED" | "FAILED";
 export type TicketStatus = "OPEN" | "IN_PROGRESS" | "WAITING" | "RESOLVED" | "CLOSED";
 export type AIMode = "DRAFT_ONLY" | "SUGGEST" | "AUTO_REPLY";
 export type IntentLabel =
@@ -79,7 +79,11 @@ export type Message = {
   sender_type: SenderType;
   sender_id: string | null;
   content: string;
+  channel?: ChannelType;
+  external_message_id?: string | null;
+  delivery_status?: DeliveryStatus | null;
   created_at: string;
+  updated_at?: string;
   metadata?: {
     ai_run_id?: string;
     trigger_message_id?: string;

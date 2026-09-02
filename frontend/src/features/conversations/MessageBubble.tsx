@@ -15,12 +15,22 @@ export function MessageBubble({ message }: { message: Message }) {
       className={cn("message-bubble", message.sender_type.toLowerCase())}
     >
       <div className="message-header">
-        <span className="message-sender">{senderLabel(message.sender_type)}</span>
+        <span className="message-sender">
+          {senderLabel(message.sender_type)}
+          {message.channel && message.sender_type === "CUSTOMER" && (
+            <span className="text-muted" style={{ marginLeft: "0.35rem", fontWeight: 400 }}>
+              · {message.channel.replace(/_/g, " ")}
+            </span>
+          )}
+        </span>
         <time className="message-time" dateTime={message.created_at}>
           {formatMessageTime(message.created_at)}
         </time>
       </div>
       <div>{message.content}</div>
+      {message.delivery_status && (
+        <div className="message-ai-tag">Delivery: {message.delivery_status}</div>
+      )}
       {message.sender_type === "AI" && message.metadata?.confidence != null && (
         <div className="message-ai-tag">
           AI Response · {Math.round(message.metadata.confidence * 100)}%

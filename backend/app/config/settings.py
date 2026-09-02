@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     ai_min_retrieval_score: float = 0.35
     support_agent_graph_version: str = "support-agent-v1"
 
+    # Day 5 — email + object storage
+    email_provider: str = "mock"
+    email_from_address: str = "support@acme.example"
+    resend_api_key: str = ""
+    storage_root_dir: str = "/tmp/support-attachments"
+    email_webhook_secret: str = "mock-secret"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

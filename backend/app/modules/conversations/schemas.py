@@ -59,6 +59,9 @@ class MessageOut(BaseModel):
     sender_type: SenderType
     sender_id: str | None
     content: str
+    channel: ChannelType | None = None
+    external_message_id: str | None = None
+    delivery_status: str | None = None
     metadata: dict[str, Any] = Field(validation_alias="metadata_")
     created_at: datetime
     updated_at: datetime
@@ -67,7 +70,7 @@ class MessageOut(BaseModel):
 
 
 class InboxFilter(BaseModel):
-    view: str = "all"  # all | mine | unassigned | team
+    view: str = "all"  # all | mine | unassigned | team | web_chat | email | form
 
 
 class AIResponseStatusOut(BaseModel):

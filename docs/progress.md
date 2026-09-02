@@ -1,50 +1,63 @@
 # Progress — AI Customer Support Platform
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 ## Status summary
 
-**Day 1, Day 2, Day 3, and Day 4 are complete (re-audited 2026-09-01).** The platform now has production-control AI: hybrid retrieval, grounding validation, explainable confidence, bot modes with takeover/kill switch, AI handoff packages, run tracing, evaluation suite (25 cases), channel overrides, Celery Beat missed-chat processing, and updated agent UI.
+**Day 1–4:** Complete (re-audited 2026-09-01).  
+**Day 5:** **Complete** — Email channel, omnichannel foundation, unified inbox, Customer 360, attachments, channel settings.
 
-**Frontend UI:** Settings uses spec mode names (Knowledge Base / Suggest Reply / Autopilot), per-channel override table, evaluation runner, run trace/grounding/token detail. Inbox has takeover/return-to-AI, suggestion panel with Use/Edit/Regenerate/Ignore, and grounding warnings.
+LLM: **Google Gemini** when `GEMINI_API_KEY` is set; otherwise **Echo/heuristic** + offline lexical embeddings.
 
-LLM: **Google Gemini** when `GEMINI_API_KEY` is set; otherwise **Echo/heuristic** + offline lexical embeddings. Unset `GEMINI_API_KEY` for fully offline tests (avoids embedding quota errors).
+---
 
-## Day 4 — Completed
-
-| Phase | Work |
-|-------|------|
-| 1 | Migration `0005_day4_ai_reliability`: prompts, bot configs, evaluation tables, extended `AIRun`/`AIConfig`, `Conversation.ai_control_mode`, ticket source/handoff fields |
-| 2 | ContextBuilder v2 + `ConversationSummarizer` + graph `load_context` |
-| 3 | Hybrid retrieval (semantic + keyword), `RelevanceGate`, conditional knowledge branch |
-| 4 | `GroundingValidator` + graph `grounding_check` node |
-| 5 | `confidence_service.py` — explainable `ConfidenceBreakdown` persisted on runs |
-| 6 | LangGraph v2 (`support-agent-v2`): prepare_query → retrieve → gate → generate → ground → confidence → decision; step tracing |
-| 7 | Bot modes (Knowledge Base / Suggest / Autopilot), takeover/return-to-AI APIs, kill switch + human control guards, **`RuntimeAIConfig` channel overrides** |
-| 8 | `AvailabilityService`, `MissedChatService`, `WAITING_FOR_AGENT`, `/agents/availability`, **Celery Beat `process_missed_chats`** |
-| 9 | `EscalationService` handoff package, ticket sources, `/conversations/{id}/ticket` |
-| 10 | Run trace JSON, cost estimator, extended run detail API |
-| 11 | `PromptService` + DB-seeded prompt versions |
-| 12 | `EvaluationService` — 25 cases, `GET/POST /ai/evaluations` |
-| 13 | Language from classify node, sentiment normalization, routing priority |
-| 14 | Settings + Inbox UI (suggestions, takeover, diagnostics) |
-
-## Day 4 tests
-
-`backend/tests/test_day4_*.py` — **16 tests** (models, context, retrieval, grounding, takeover, evaluation suite).
-
-Run: `docker compose exec backend pytest -q tests/test_day4_phase1_models.py tests/test_day4_phase2_context.py tests/test_day4_phase3_retrieval.py tests/test_day4_acceptance.py`
-
-## Day 3 — Completed (prior)
+## Day 5 — Completed
 
 | Phase | Work |
 |-------|------|
-| 1–14 | Working AI agent, Celery async, escalation, basic UI — see `docs/day3-implementation-plan.md` |
+| 1 | Migration `0007_day5_omnichannel`: `Message` extensions, `ExternalMessage`, `Attachment`, `ChannelConfiguration`, `DeliveryStatus` |
+| 2 | `ObjectStorage` (local filesystem), normalized channel events, webhook architecture |
+| 3 | `EmailProvider` ABC + `MockEmailProvider` + `ResendEmailProvider` |
+| 4 | `EmailAdapter`, `MessageNormalizer`, `CustomerResolver`, `receive_inbound()` |
+| 5 | `POST /webhooks/email/inbound`, idempotency, email threading |
+| 6 | Outbound email via adapter, delivery status lifecycle, AI → `EmailAdapter` |
+| 7 | Attachment model/API, local object storage |
+| 8 | Per-channel AI modes validated on EMAIL (Suggest / Autopilot / KB) |
+| 9 | Unified inbox filters + badges, Customer 360 API + UI, channel settings |
+| 10 | Ticket integration on email escalation (source, customer_id, channel) |
+| 11–12 | Channels API, email composer UI, `/settings/channels`, `/customers/:id` |
+| 13 | Day 5 test suite — **16 tests**, Day 4 regression — **26/26** |
+
+## Day 5 tests
+
+```bash
+docker compose exec backend pytest -q \
+  tests/test_day5_phase1_models.py \
+  tests/test_day5_customer_resolver.py \
+  tests/test_day5_email_inbound.py \
+  tests/test_day5_email_outbound.py \
+  tests/test_day5_email_threading.py \
+  tests/test_day5_email_ai_suggest.py \
+  tests/test_day5_email_autopilot.py \
+  tests/test_day5_email_escalation.py \
+  tests/test_day5_attachments.py \
+  tests/test_channel_adapter.py
+```
+
+**Result:** 16/16 passed (2026-09-02)
+
+---
+
+## Day 4 — Completed (prior)
+
+See [`docs/day4-final-audit.md`](day4-final-audit.md). Day 4 suite: **26/26 passed** after Day 5 changes.
+
+---
 
 ## Documentation
 
-- Day 4 plan: [`docs/day4-implementation-plan.md`](day4-implementation-plan.md)
-- Day 4 schema: [`docs/database/day4-schema.md`](database/day4-schema.md)
+- Day 5 plan: [`docs/day5-implementation-plan.md`](day5-implementation-plan.md)
+- Day 5 schema: [`docs/database/day5-schema.md`](database/day5-schema.md)
 - Run guide: [`docs/run-guide.md`](run-guide.md)
 
 ## Default credentials
@@ -54,8 +67,7 @@ Run: `docker compose exec backend pytest -q tests/test_day4_phase1_models.py tes
 
 ## Notes
 
-- **Graph version:** `support-agent-v2`
-- **Evaluation:** Settings → Run evaluation suite, or `POST /api/v1/ai/evaluations/run`
-- **Takeover:** Inbox thread → Takeover / Return to AI
-- **Suggest mode:** AI suggestions appear as internal messages; Use Reply in inbox composer
-- Integration tests that hit Gemini embeddings may fail on quota — use offline Echo for CI
+- **Email provider (dev):** `EMAIL_PROVIDER=mock` — no external API required
+- **Inbound webhook:** `POST /api/v1/webhooks/email/inbound` with `x-mock-signature: test-bypass` for local testing
+- **Channel defaults (seed):** Web Chat=Autopilot, Email=Suggest Reply, Form=Knowledge Base
+- **Customer 360:** `/customers/:customerId` or `GET /api/v1/customers/{id}/360`

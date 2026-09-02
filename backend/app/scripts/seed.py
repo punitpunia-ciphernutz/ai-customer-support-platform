@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.infrastructure.database.models import ChannelType, Organization, Role, RoleName, Team, TeamMember, User
+from app.infrastructure.database.models import ChannelConfiguration, ChannelType, Organization, Role, RoleName, Team, TeamMember, User
 from app.modules.ai.domain.models import (
     AgentAvailability,
     AIEvaluation,
@@ -186,6 +186,24 @@ def seed() -> None:
         else:
             evaluation.case_count = len(EVALUATION_CASES)
             evaluation.cases = EVALUATION_CASES
+
+        for channel in ChannelType:
+            ch_cfg = session.scalar(
+                select(ChannelConfiguration).where(
+                    ChannelConfiguration.organization_id == org.id,
+                    ChannelConfiguration.channel == channel,
+                )
+            )
+            if ch_cfg is None:
+                session.add(
+                    ChannelConfiguration(
+                        organization_id=org.id,
+                        channel=channel,
+                        enabled=channel in (ChannelType.WEB_CHAT, ChannelType.EMAIL),
+                        provider="mock" if channel == ChannelType.EMAIL else None,
+                        settings={"from_address": "support@acme.example"} if channel == ChannelType.EMAIL else {},
+                    )
+                )
 
         session.commit()
         print(f"Seeded org={org.id} agent={settings.seed_agent_email}")

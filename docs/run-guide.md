@@ -26,6 +26,13 @@ AI_CONTEXT_RECENT_MESSAGE_LIMIT=10
 AI_SUMMARY_MESSAGE_THRESHOLD=20
 AI_MIN_RETRIEVAL_SCORE=0.35
 SUPPORT_AGENT_GRAPH_VERSION=support-agent-v2
+
+# Day 5 — email + attachments (mock provider works offline)
+EMAIL_PROVIDER=mock
+EMAIL_FROM_ADDRESS=support@acme.example
+RESEND_API_KEY=
+STORAGE_ROOT_DIR=/tmp/support-attachments
+EMAIL_WEBHOOK_SECRET=mock-secret
 ```
 
 Do **not** commit API keys. For **offline tests**, leave `GEMINI_API_KEY` empty.
@@ -44,7 +51,7 @@ make up
 | Backend API + docs | http://localhost:8000/docs |
 | Health | http://localhost:8000/health |
 
-On backend start: `alembic upgrade head` (through **`0005_day4_ai_reliability`**) + seed (prompts, bot configs, evaluation baseline, business hours).
+On backend start: `alembic upgrade head` (through **`0007_day5_omnichannel`**) + seed (prompts, bot configs, channel configs, evaluation baseline, business hours).
 
 **Important:** The **worker** service must run for async AI replies. The **beat** service runs missed-chat timeout processing every 60 seconds.
 
@@ -54,6 +61,24 @@ On backend start: `alembic upgrade head` (through **`0005_day4_ai_reliability`**
 make migrate
 make seed
 make test
+```
+
+Day 5 test suite (email + omnichannel):
+
+```bash
+docker compose exec backend alembic upgrade head
+docker compose exec backend python -m app.scripts.seed
+docker compose exec backend pytest -q \
+  tests/test_day5_phase1_models.py \
+  tests/test_day5_customer_resolver.py \
+  tests/test_day5_email_inbound.py \
+  tests/test_day5_email_outbound.py \
+  tests/test_day5_email_threading.py \
+  tests/test_day5_email_ai_suggest.py \
+  tests/test_day5_email_autopilot.py \
+  tests/test_day5_email_escalation.py \
+  tests/test_day5_attachments.py \
+  tests/test_channel_adapter.py
 ```
 
 Day 4 test suite (offline, recommended):
@@ -88,8 +113,10 @@ docker compose exec backend pytest -q tests/test_day3_agent.py
 
 1. http://localhost:5173/login — **agent@example.com** / **agent123!**
 2. **Settings** — AI kill switch, thresholds, require knowledge, multilingual, evaluation runner
-3. **Inbox** — takeover, AI suggestions, diagnostics panel
+3. **Inbox** — takeover, AI suggestions, email composer for EMAIL threads, channel filters
 4. **Web Chat** — customer demo (no internal diagnostics)
+5. **Settings → Channel settings** — enable/disable Email channel
+6. **Customers → Customer 360** — cross-channel history
 
 ## 5. Day 4 verification
 
@@ -97,7 +124,7 @@ docker compose exec backend pytest -q tests/test_day3_agent.py
 
 ```bash
 docker compose exec backend alembic current
-# Should show: 0005_day4_ai_reliability (head)
+# Should show: 0007_day5_omnichannel (head)
 ```
 
 ### AI config (extended)
@@ -173,6 +200,25 @@ curl -s -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application
 2. Customer message → offline notice / waiting (no AI reply)
 3. Re-enable AI for normal operation
 
+### Flow E — Inbound email (mock webhook)
+
+```bash
+ORG_ID=$(docker compose exec -T backend python -c "from sqlalchemy import create_engine,select; from sqlalchemy.orm import Session; from app.config import get_settings; from app.infrastructure.database.models import Organization; e=create_engine(get_settings().database_url_sync); print(Session(e).scalar(select(Organization.id).limit(1)))")
+
+curl -s -X POST http://localhost:8000/api/v1/webhooks/email/inbound \
+  -H "Content-Type: application/json" \
+  -H "x-mock-signature: test-bypass" \
+  -d "{\"organization_id\":\"$ORG_ID\",\"message_id\":\"<demo-$(date +%s)@example.com>\",\"from_email\":\"demo@example.com\",\"subject\":\"Billing Question\",\"body_text\":\"I need help with my invoice.\"}"
+```
+
+Then open **Inbox → Email filter** — conversation appears with AI suggestion (Email mode = Suggest Reply).
+
+### Flow F — Agent email reply
+
+1. Open an EMAIL conversation in Inbox
+2. Compose subject + body → **Send Email**
+3. Mock provider records outbound send (check backend logs or re-run with `EMAIL_PROVIDER=mock`)
+
 ## 6. Day 3 demos (still valid)
 
 See previous sections for knowledge search, classification, inbox walkthrough.
@@ -183,7 +229,7 @@ See previous sections for knowledge search, classification, inbox walkthrough.
 - **No AI reply**: worker running, `enabled=true`, `mode=AUTO_REPLY`, not `HUMAN_CONTROL`
 - **Duplicate replies**: idempotency via `processing_key`
 - **Evaluation fails with embedding errors**: run eval via Echo path (Settings button uses offline graph when no retrieval DB session in eval runner)
-- **Schema docs**: [`docs/database/day4-schema.md`](database/day4-schema.md)
+- **Schema docs**: [`docs/database/day5-schema.md`](database/day5-schema.md), [`docs/database/day4-schema.md`](database/day4-schema.md)
 
 ## 8. Non-Docker (optional)
 

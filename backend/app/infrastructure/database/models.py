@@ -20,12 +20,16 @@ from app.infrastructure.database.base import Base
 
 __all__ = [
     "ActorType",
+    "Attachment",
     "AuditLog",
     "Base",
+    "ChannelConfiguration",
     "ChannelType",
     "Conversation",
     "AIControlMode",
     "ConversationStatus",
+    "DeliveryStatus",
+    "ExternalMessage",
     "TicketSource",
     "Customer",
     "Message",
@@ -89,6 +93,15 @@ class SenderType(StrEnum):
     AGENT = "AGENT"
     AI = "AI"
     SYSTEM = "SYSTEM"
+
+
+class DeliveryStatus(StrEnum):
+    QUEUED = "QUEUED"
+    SENDING = "SENDING"
+    SENT = "SENT"
+    DELIVERED = "DELIVERED"
+    OPENED = "OPENED"
+    FAILED = "FAILED"
 
 
 class TicketStatus(StrEnum):
@@ -221,6 +234,7 @@ class Conversation(Base):
     assigned_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
     assigned_team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), index=True)
     subject: Mapped[str | None] = mapped_column(String(512))
+    thread_id: Mapped[str | None] = mapped_column(String(512), index=True)
     ai_control_mode: Mapped[AIControlMode] = mapped_column(
         Enum(AIControlMode, name="ai_control_mode"), default=AIControlMode.AI_CONTROL, nullable=False
     )
@@ -258,6 +272,11 @@ class Message(Base):
     sender_type: Mapped[SenderType] = mapped_column(Enum(SenderType, name="sender_type"), nullable=False)
     sender_id: Mapped[str | None] = mapped_column(String(64))
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    channel: Mapped[ChannelType | None] = mapped_column(Enum(ChannelType, name="channel_type", create_constraint=False))
+    external_message_id: Mapped[str | None] = mapped_column(String(512), index=True)
+    delivery_status: Mapped[DeliveryStatus | None] = mapped_column(
+        Enum(DeliveryStatus, name="delivery_status", create_constraint=False)
+    )
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -265,6 +284,54 @@ class Message(Base):
     )
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
+    attachments: Mapped[list["Attachment"]] = relationship(back_populates="message")
+
+
+class ExternalMessage(Base):
+    """Idempotency record for inbound channel webhooks."""
+
+    __tablename__ = "external_messages"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "provider", "external_message_id", name="uq_external_message_idempotency"),
+    )
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    external_message_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    message_id: Mapped[str] = mapped_column(ForeignKey("messages.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Attachment(Base):
+    __tablename__ = "attachments"
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    message_id: Mapped[str | None] = mapped_column(ForeignKey("messages.id"), nullable=True, index=True)
+    filename: Mapped[str] = mapped_column(String(512), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    size: Mapped[int] = mapped_column(default=0)
+    storage_key: Mapped[str] = mapped_column(String(1024), nullable=False)
+    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    message: Mapped[Message] = relationship(back_populates="attachments")
+
+
+class ChannelConfiguration(Base):
+    __tablename__ = "channel_configurations"
+    __table_args__ = (UniqueConstraint("organization_id", "channel", name="uq_channel_configuration_org_channel"),)
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
+    channel: Mapped[ChannelType] = mapped_column(Enum(ChannelType, name="channel_type", create_constraint=False), nullable=False)
+    enabled: Mapped[bool] = mapped_column(default=False)
+    provider: Mapped[str | None] = mapped_column(String(64))
+    settings: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class Ticket(Base):

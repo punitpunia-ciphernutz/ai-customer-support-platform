@@ -2,7 +2,10 @@ from fastapi import APIRouter
 
 from app.modules.agents.router import router as agents_router
 from app.modules.ai.api.routes import router as ai_router
+from app.modules.attachments.router import router as attachments_router
 from app.modules.auth.router import router as auth_router
+from app.modules.channels.router import router as channels_router
+from app.modules.channels.webhooks import router as webhooks_router
 from app.modules.conversations.router import router as conversations_router
 from app.modules.customers.router import router as customers_router
 from app.modules.knowledge.api.routes import router as knowledge_router
@@ -25,3 +28,6 @@ api_router.include_router(teams_router)
 api_router.include_router(knowledge_router)
 api_router.include_router(ai_router)
 api_router.include_router(agents_router)
+api_router.include_router(channels_router)
+api_router.include_router(webhooks_router)
+api_router.include_router(attachments_router)

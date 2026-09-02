@@ -13,9 +13,11 @@ from app.infrastructure.audit import write_audit
 from app.infrastructure.database.models import (
     ActorType,
     AIControlMode,
+    ChannelType,
     Conversation,
     ConversationStatus,
     Customer,
+    DeliveryStatus,
     Message,
     Participant,
     SenderType,
@@ -25,8 +27,13 @@ from app.infrastructure.database.models import (
 from app.infrastructure.events import DomainEvent, event_bus
 from app.modules.ai.tasks_bridge import enqueue_ai_message_processing
 from app.modules.auth.permissions import CONVERSATIONS_ASSIGN
+from app.modules.channels.idempotency import IdempotencyService
 from app.modules.conversations.channels import IncomingMessage, get_adapter
+from app.modules.conversations.email_threading import EmailThreadingService
+from app.modules.conversations.events import message_failed, message_received, message_sent
+from app.modules.conversations.normalizer import normalize_subject
 from app.modules.conversations.schemas import ConversationCreate, ConversationUpdate, MessageCreate
+from app.modules.channels.schemas import EmailSendRequest
 
 
 class ConversationService:
@@ -44,6 +51,12 @@ class ConversationService:
                 await self.db.execute(select(TeamMember.team_id).where(TeamMember.user_id == user.id))
             ).scalars().all()
             stmt = stmt.where(Conversation.assigned_team_id.in_(list(team_ids) or ["__none__"]))
+        elif view == "web_chat":
+            stmt = stmt.where(Conversation.channel == ChannelType.WEB_CHAT)
+        elif view == "email":
+            stmt = stmt.where(Conversation.channel == ChannelType.EMAIL)
+        elif view == "form":
+            stmt = stmt.where(Conversation.channel == ChannelType.FORM)
         stmt = stmt.order_by(Conversation.updated_at.desc())
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
@@ -82,7 +95,7 @@ class ConversationService:
                 "metadata": {},
             }
         )
-        incoming = await adapter.identify_customer(incoming)
+        incoming = await adapter.identify_customer(incoming, db=self.db)
         return await self._create_from_incoming(
             incoming,
             channel=body.channel,
@@ -107,7 +120,7 @@ class ConversationService:
                 "metadata": {},
             }
         )
-        incoming = await adapter.identify_customer(incoming)
+        incoming = await adapter.identify_customer(incoming, db=self.db)
         return await self._create_from_incoming(
             incoming,
             channel=body.channel,
@@ -199,35 +212,236 @@ class ConversationService:
         self, user: User, conversation_id: str, body: MessageCreate
     ) -> Message:
         conversation = await self.get_conversation(user.organization_id, conversation_id)
-        adapter = get_adapter(conversation.channel)
-        sender_id = user.id if body.sender_type == SenderType.AGENT else body.metadata.get("sender_id")
-        incoming = await adapter.normalize(
-            {
-                "organization_id": user.organization_id,
-                "content": body.content,
-                "customer_id": conversation.customer_id,
-                "metadata": {**(body.metadata or {}), "sender_type": body.sender_type.value},
-            }
+        return await self._create_outbound_message(
+            conversation=conversation,
+            organization_id=user.organization_id,
+            sender_type=body.sender_type,
+            sender_id=user.id if body.sender_type == SenderType.AGENT else body.metadata.get("sender_id"),
+            content=body.content,
+            metadata=body.metadata,
         )
-        await adapter.send(conversation.id, incoming.content, incoming.metadata)
+
+    async def send_email_reply(
+        self, user: User, conversation_id: str, body: EmailSendRequest
+    ) -> Message:
+        conversation = await self.get_conversation(user.organization_id, conversation_id)
+        if conversation.channel != ChannelType.EMAIL:
+            raise HTTPException(status_code=400, detail="Conversation is not an email channel")
+        meta = dict(body.metadata or {})
+        if body.subject:
+            meta["subject"] = body.subject
+        if body.attachment_ids:
+            meta["attachment_ids"] = body.attachment_ids
+        return await self._create_outbound_message(
+            conversation=conversation,
+            organization_id=user.organization_id,
+            sender_type=SenderType.AGENT,
+            sender_id=user.id,
+            content=body.content,
+            metadata=meta,
+        )
+
+    async def receive_inbound_email(
+        self,
+        organization_id: str,
+        provider: str,
+        normalized: dict[str, Any],
+    ) -> tuple[Conversation, Message, bool]:
+        external_id = normalized.get("external_message_id")
+        if not external_id:
+            raise HTTPException(status_code=400, detail="external_message_id required")
+
+        idempotency = IdempotencyService(self.db)
+        if await idempotency.is_processed(organization_id, provider, external_id):
+            result = await self.db.execute(
+                select(Message)
+                .join(Conversation, Conversation.id == Message.conversation_id)
+                .where(
+                    Conversation.organization_id == organization_id,
+                    Message.external_message_id == external_id,
+                )
+                .limit(1)
+            )
+            msg = result.scalar_one_or_none()
+            if msg is not None:
+                conv = await self.get_conversation_by_id(msg.conversation_id)
+                return conv, msg, False
+            raise HTTPException(status_code=409, detail="Duplicate webhook without message record")
+
+        normalized["organization_id"] = organization_id
+        adapter = get_adapter(ChannelType.EMAIL)
+        incoming = await adapter.normalize(normalized)
+        incoming = await adapter.identify_customer(incoming, db=self.db)
+        return await self.receive_inbound(incoming, provider=provider, created=True)
+
+    async def receive_inbound(
+        self,
+        incoming: IncomingMessage,
+        *,
+        provider: str | None = None,
+        created: bool = True,
+    ) -> tuple[Conversation, Message, bool]:
+        adapter = get_adapter(incoming.channel)
+        if not incoming.customer_id:
+            incoming = await adapter.identify_customer(incoming, db=self.db)
+
+        conversation: Conversation | None = None
+        subject = (incoming.metadata or {}).get("subject")
+
+        if incoming.channel == ChannelType.EMAIL:
+            threading = EmailThreadingService(self.db)
+            conversation = await threading.find_conversation(
+                incoming.organization_id,
+                in_reply_to=(incoming.metadata or {}).get("in_reply_to"),
+                references=list((incoming.metadata or {}).get("references") or []),
+                customer_id=incoming.customer_id or "",
+                subject=subject or "(no subject)",
+            )
+
+        if conversation is None:
+            thread_id = normalize_subject(subject) if subject else None
+            conversation = Conversation(
+                organization_id=incoming.organization_id,
+                customer_id=incoming.customer_id,
+                channel=incoming.channel,
+                status=ConversationStatus.OPEN,
+                subject=subject,
+                thread_id=thread_id,
+            )
+            self.db.add(conversation)
+            await self.db.flush()
+            self.db.add(
+                Participant(
+                    conversation_id=conversation.id,
+                    participant_type=SenderType.CUSTOMER,
+                    participant_id=incoming.customer_id,
+                )
+            )
+            await event_bus.publish(
+                DomainEvent(
+                    name="conversation.created",
+                    organization_id=incoming.organization_id,
+                    payload={
+                        "conversation_id": conversation.id,
+                        "customer_id": incoming.customer_id,
+                        "channel": incoming.channel.value,
+                    },
+                )
+            )
+        elif subject and not conversation.subject:
+            conversation.subject = subject
 
         msg = Message(
             conversation_id=conversation.id,
-            sender_type=body.sender_type,
-            sender_id=sender_id,
+            sender_type=SenderType.CUSTOMER,
+            sender_id=incoming.customer_id,
             content=incoming.content,
+            channel=incoming.channel,
+            external_message_id=incoming.external_id,
             metadata_=incoming.metadata or {},
+        )
+        self.db.add(msg)
+        await self.db.flush()
+        await self.db.refresh(msg)
+
+        if provider and incoming.external_id:
+            await IdempotencyService(self.db).record(
+                incoming.organization_id,
+                provider,
+                incoming.external_id,
+                msg.id,
+            )
+
+        await self._publish_message(msg, conversation)
+        await self._publish_channel_event(
+            message_received(
+                channel=incoming.channel,
+                provider=provider,
+                external_message_id=incoming.external_id,
+                conversation_id=conversation.id,
+                message_id=msg.id,
+                metadata={"subject": subject},
+            ),
+            incoming.organization_id,
+        )
+        return conversation, msg, created
+
+    async def _create_outbound_message(
+        self,
+        *,
+        conversation: Conversation,
+        organization_id: str,
+        sender_type: SenderType,
+        sender_id: str | None,
+        content: str,
+        metadata: dict[str, Any] | None,
+    ) -> Message:
+        adapter = get_adapter(conversation.channel)
+        meta = dict(metadata or {})
+        meta.setdefault("sender_type", sender_type.value)
+
+        msg = Message(
+            conversation_id=conversation.id,
+            sender_type=sender_type,
+            sender_id=sender_id,
+            content=content,
+            channel=conversation.channel,
+            delivery_status=DeliveryStatus.QUEUED if conversation.channel == ChannelType.EMAIL else None,
+            metadata_=meta,
         )
         self.db.add(msg)
         if conversation.status == ConversationStatus.CLOSED:
             conversation.status = ConversationStatus.OPEN
         await self.db.flush()
+
+        if conversation.channel == ChannelType.EMAIL and sender_type in {SenderType.AGENT, SenderType.AI}:
+            msg.delivery_status = DeliveryStatus.SENDING
+            await self.db.flush()
+            try:
+                result = await adapter.send(
+                    conversation.id,
+                    content,
+                    meta,
+                    db=self.db,
+                )
+                if result and result.external_message_id:
+                    msg.external_message_id = result.external_message_id
+                msg.delivery_status = DeliveryStatus.SENT
+            except Exception as exc:
+                msg.delivery_status = DeliveryStatus.FAILED
+                msg.metadata_ = {**msg.metadata_, "delivery_error": str(exc)}
+                await self._publish_channel_event(
+                    message_failed(
+                        channel=conversation.channel,
+                        provider=None,
+                        external_message_id=msg.external_message_id,
+                        conversation_id=conversation.id,
+                        message_id=msg.id,
+                        metadata={"error": str(exc)},
+                    ),
+                    organization_id,
+                )
+        else:
+            await adapter.send(conversation.id, content, meta, db=self.db)
+
+        await self.db.flush()
         await self.db.refresh(msg)
         await self._publish_message(msg, conversation)
+        if conversation.channel == ChannelType.EMAIL and msg.delivery_status == DeliveryStatus.SENT:
+            await self._publish_channel_event(
+                message_sent(
+                    channel=conversation.channel,
+                    provider=None,
+                    external_message_id=msg.external_message_id,
+                    conversation_id=conversation.id,
+                    message_id=msg.id,
+                ),
+                organization_id,
+            )
         await event_bus.publish(
             DomainEvent(
                 name="conversation.updated",
-                organization_id=user.organization_id,
+                organization_id=organization_id,
                 payload={"conversation_id": conversation.id},
             )
         )
@@ -254,13 +468,14 @@ class ConversationService:
                 "metadata": metadata or {},
             }
         )
-        incoming = await adapter.identify_customer(incoming)
+        incoming = await adapter.identify_customer(incoming, db=self.db)
 
         msg = Message(
             conversation_id=conversation.id,
             sender_type=SenderType.CUSTOMER,
             sender_id=customer_id,
             content=incoming.content,
+            channel=conversation.channel,
             metadata_=incoming.metadata or {},
         )
         self.db.add(msg)
@@ -323,6 +538,7 @@ class ConversationService:
                 sender_type=SenderType.CUSTOMER,
                 sender_id=customer_id,
                 content=initial_message,
+                channel=channel,
                 metadata_=incoming.metadata or {},
             )
             self.db.add(msg)
@@ -462,7 +678,40 @@ class ConversationService:
             raise HTTPException(status_code=404, detail="Customer not found")
         return customer
 
+    async def send_ai_reply(self, conversation_id: str, content: str, metadata: dict[str, Any]) -> Message:
+        """Send AI-generated reply through channel adapter (email delivery when applicable)."""
+        conversation = await self.get_conversation_by_id(conversation_id)
+        return await self._create_outbound_message(
+            conversation=conversation,
+            organization_id=conversation.organization_id,
+            sender_type=SenderType.AI,
+            sender_id=None,
+            content=content,
+            metadata=metadata,
+        )
+
+    async def _publish_channel_event(self, event, organization_id: str) -> None:
+        await event_bus.publish(
+            DomainEvent(
+                name=event.name,
+                organization_id=organization_id,
+                payload={
+                    "channel": event.channel.value,
+                    "provider": event.provider,
+                    "external_message_id": event.external_message_id,
+                    "conversation_id": event.conversation_id,
+                    "message_id": event.message_id,
+                    "metadata": event.metadata,
+                },
+            )
+        )
+
     async def _publish_message(self, msg: Message, conversation: Conversation) -> None:
+        channel = msg.channel or conversation.channel
+        channel_value = channel.value if hasattr(channel, "value") else str(channel)
+        delivery_value = (
+            msg.delivery_status.value if msg.delivery_status and hasattr(msg.delivery_status, "value") else msg.delivery_status
+        )
         await event_bus.publish(
             DomainEvent(
                 name="message.created",
@@ -473,6 +722,8 @@ class ConversationService:
                     "sender_type": msg.sender_type.value,
                     "sender_id": msg.sender_id,
                     "content": msg.content,
+                    "channel": channel_value,
+                    "delivery_status": delivery_value,
                     "created_at": msg.created_at.isoformat() if msg.created_at else None,
                 },
             )
