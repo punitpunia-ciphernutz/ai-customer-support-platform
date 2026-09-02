@@ -35,3 +35,8 @@ Thumbs.db
 # Alembic
 # keep migrations; ignore local sqlite if any
 *.db
+
+# Celery Beat runtime state
+celerybeat-schedule
+celerybeat-schedule.db
+celerybeat.pid
