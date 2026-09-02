@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/services/api/client";
@@ -29,7 +30,9 @@ type StatusFilter = "all" | TicketStatus;
 
 export function TicketsPage() {
   const qc = useQueryClient();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkId = searchParams.get("t");
+  const [selectedId, setSelectedId] = useState<string | null>(deepLinkId);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -80,6 +83,14 @@ export function TicketsPage() {
     if (statusFilter === "all") return list;
     return list.filter((t) => t.status === statusFilter);
   }, [tickets.data, statusFilter]);
+
+  useEffect(() => {
+    if (!deepLinkId) return;
+    setSelectedId(deepLinkId);
+    const next = new URLSearchParams(searchParams);
+    next.delete("t");
+    setSearchParams(next, { replace: true });
+  }, [deepLinkId]); // eslint-disable-line react-hooks/exhaustive-deps -- apply once per deep link
 
   const selected = useMemo(
     () => tickets.data?.find((t) => t.id === selectedId) ?? null,

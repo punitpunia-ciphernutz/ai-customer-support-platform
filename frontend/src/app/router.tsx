@@ -5,11 +5,10 @@ import { AutomationFormPage } from "@/features/automations/AutomationFormPage";
 import { AutomationsPage } from "@/features/automations/AutomationsPage";
 import { AutomationDetailPage } from "@/features/automations/AutomationDetailPage";
 import { BusinessHoursPage } from "@/features/settings/BusinessHoursPage";
-import { ChannelsPage } from "@/features/channels/ChannelsPage";
-import { InboxPage } from "@/features/inbox/InboxPage";
 import { CustomerDetailPage } from "@/features/customers/CustomerDetailPage";
 import { CustomersPage } from "@/features/customers/CustomersPage";
 import { WebChatPage } from "@/features/conversations/WebChatPage";
+import { InboxPage } from "@/features/inbox/InboxPage";
 import { KnowledgePage, KnowledgeSourcePage } from "@/features/knowledge/KnowledgePage";
 import { AppShell } from "@/components/shared/AppShell";
 import { TicketsPage } from "@/features/tickets/TicketsPage";
@@ -56,8 +55,8 @@ export function AppRouter() {
                 <Route path="/automations/:automationId/edit" element={<AutomationFormPage />} />
                 <Route path="/automations/:automationId" element={<AutomationDetailPage />} />
                 <Route path="/app/automations" element={<AutomationsPage />} />
-                <Route path="/channels" element={<ChannelsPage />} />
-                <Route path="/app/channels" element={<ChannelsPage />} />
+                <Route path="/channels" element={<Navigate to="/settings/channels" replace />} />
+                <Route path="/app/channels" element={<Navigate to="/settings/channels" replace />} />
                 <Route path="/knowledge" element={<KnowledgePage />} />
                 <Route path="/knowledge/:sourceId" element={<KnowledgeSourcePage />} />
                 <Route path="/app/knowledge" element={<Navigate to="/knowledge" replace />} />

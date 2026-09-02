@@ -1,7 +1,8 @@
-import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/services/api/client";
 import { Alert, LoadingState, PageHeader } from "@/components/ui";
+import { SettingsSubNav } from "@/components/shared/SettingsSubNav";
+import { cn } from "@/utils/cn";
 import type { AIMode, ChannelType } from "@/types";
 
 const MODE_LABELS: Record<AIMode, string> = {
@@ -50,25 +51,24 @@ export function ChannelSettingsPage() {
   if (channels.isLoading || aiConfig.isLoading) return <LoadingState message="Loading channels…" />;
   if (channels.isError || aiConfig.isError) {
     return (
-      <Alert type="error">
-        {channels.error instanceof ApiError
-          ? channels.error.message
-          : aiConfig.error instanceof ApiError
-            ? aiConfig.error.message
-            : "Failed to load channels."}
-      </Alert>
+      <div className="page-scroll">
+        <Alert type="error">
+          {channels.error instanceof ApiError
+            ? channels.error.message
+            : aiConfig.error instanceof ApiError
+              ? aiConfig.error.message
+              : "Failed to load channels."}
+        </Alert>
+      </div>
     );
   }
 
   return (
-    <div className="page">
-      <PageHeader
-        title="Channel settings"
-        description="Configure inbound and outbound channels."
-        action={<Link className="btn btn-secondary btn-sm" to="/settings">← Settings</Link>}
-      />
+    <div className="page-scroll">
+      <PageHeader title="Settings" description="Configure inbound and outbound channels and AI modes per channel." />
+      <SettingsSubNav />
 
-      <div className="card">
+      <div className="table-wrap">
         <table className="data-table">
           <thead>
             <tr>
@@ -84,44 +84,54 @@ export function ChannelSettingsPage() {
               const mode =
                 aiConfig.data?.channel_overrides.find((o) => o.channel === ch.channel)?.mode ?? null;
               return (
-              <tr key={ch.id}>
-                <td>{ch.channel.replace(/_/g, " ")}</td>
-                <td>{ch.enabled ? "Connected" : "Disabled"}</td>
-                <td>{ch.provider ?? "—"}</td>
-                <td>
-                  {ch.channel === "FORM" ? (
-                    <span className="text-muted">Coming Soon</span>
-                  ) : (
-                    <select
-                      value={mode ?? ""}
-                      onChange={(e) =>
-                        patchMode.mutate({ channel: ch.channel, mode: e.target.value as AIMode })
-                      }
-                      disabled={patchMode.isPending}
-                    >
-                      <option value="" disabled>Select mode</option>
-                      {(Object.keys(MODE_LABELS) as AIMode[]).map((m) => (
-                        <option key={m} value={m}>{MODE_LABELS[m]}</option>
-                      ))}
-                    </select>
-                  )}
-                </td>
-                <td>
-                  {ch.channel === "FORM" ? (
-                    <span className="text-muted">Coming Soon</span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => patch.mutate({ channel: ch.channel, enabled: !ch.enabled })}
-                      disabled={patch.isPending}
-                    >
-                      {ch.enabled ? "Disable" : "Enable"}
-                    </button>
-                  )}
-                </td>
-              </tr>
-            );})}
+                <tr key={ch.id}>
+                  <td>{ch.channel.replace(/_/g, " ")}</td>
+                  <td>
+                    <span className={cn("badge", ch.enabled ? "badge-open" : "badge-closed")}>
+                      {ch.enabled ? "Connected" : "Disabled"}
+                    </span>
+                  </td>
+                  <td>{ch.provider ?? "—"}</td>
+                  <td>
+                    {ch.channel === "FORM" ? (
+                      <span className="text-muted">Coming soon</span>
+                    ) : (
+                      <select
+                        className="form-select"
+                        value={mode ?? ""}
+                        onChange={(e) =>
+                          patchMode.mutate({ channel: ch.channel, mode: e.target.value as AIMode })
+                        }
+                        disabled={patchMode.isPending}
+                      >
+                        <option value="" disabled>
+                          Select mode
+                        </option>
+                        {(Object.keys(MODE_LABELS) as AIMode[]).map((m) => (
+                          <option key={m} value={m}>
+                            {MODE_LABELS[m]}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </td>
+                  <td>
+                    {ch.channel === "FORM" ? (
+                      <span className="text-muted">Coming soon</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => patch.mutate({ channel: ch.channel, enabled: !ch.enabled })}
+                        disabled={patch.isPending}
+                      >
+                        {ch.enabled ? "Disable" : "Enable"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

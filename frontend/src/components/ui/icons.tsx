@@ -72,6 +72,31 @@ export function IconSettings(props: IconProps) {
   );
 }
 
+export function IconAutomation(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 2v4" />
+      <path d="m4.93 4.93 2.83 2.83" />
+      <path d="M2 12h4" />
+      <path d="m4.93 19.07 2.83-2.83" />
+      <path d="M12 18v4" />
+      <path d="m19.07 19.07-2.83-2.83" />
+      <path d="M22 12h-4" />
+      <path d="m19.07 4.93-2.83 2.83" />
+      <circle cx="12" cy="12" r="3" />
+    </Icon>
+  );
+}
+
+export function IconClock(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </Icon>
+  );
+}
+
 export function IconExternal(props: IconProps) {
   return (
     <Icon {...props}>

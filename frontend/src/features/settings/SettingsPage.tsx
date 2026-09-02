@@ -19,6 +19,7 @@ import {
   PageHeader,
   StatCard,
 } from "@/components/ui";
+import { SettingsSubNav } from "@/components/shared/SettingsSubNav";
 import { cn } from "@/utils/cn";
 
 export function SettingsPage() {
@@ -119,9 +120,7 @@ export function SettingsPage() {
         title="Settings"
         description="Configure AI support behavior, thresholds, intent routing, and review recent AI runs."
       />
-      <p style={{ marginTop: "-0.75rem", marginBottom: "1rem" }}>
-        <a href="/settings/channels">Channel settings →</a>
-      </p>
+      <SettingsSubNav />
 
       {saveMsg && <Alert type="success">{saveMsg}</Alert>}
       {saveErr && <Alert type="error">{saveErr}</Alert>}
