@@ -1,7 +1,8 @@
 // Enums — must match backend exactly
 export type RoleName = "OWNER" | "ADMIN" | "MANAGER" | "AGENT" | "READ_ONLY";
 export type ChannelType = "WEB_CHAT" | "EMAIL" | "FORM";
-export type ConversationStatus = "OPEN" | "PENDING" | "CLOSED";
+export type ConversationStatus = "OPEN" | "PENDING" | "WAITING_FOR_AGENT" | "CLOSED";
+export type AIControlMode = "AI_CONTROL" | "HUMAN_CONTROL";
 export type Priority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
 export type SenderType = "CUSTOMER" | "AGENT" | "AI" | "SYSTEM";
 export type TicketStatus = "OPEN" | "IN_PROGRESS" | "WAITING" | "RESOLVED" | "CLOSED";
@@ -18,7 +19,7 @@ export type IntentLabel =
   | "OTHER";
 export type AIRunType = "CLASSIFICATION" | "GENERATION" | "SUMMARY" | "RETRIEVAL" | "AGENT";
 export type AIRunStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "COMPLETED" | "FAILED";
-export type AgentDecision = "AI_RESOLVE" | "ESCALATE";
+export type AgentDecision = "AI_RESOLVE" | "ESCALATE" | "SUGGEST_ONLY";
 
 export type Role = { id: string; name: RoleName; permissions: string[] };
 
@@ -67,6 +68,7 @@ export type Conversation = {
   assigned_user_id: string | null;
   assigned_team_id: string | null;
   subject: string | null;
+  ai_control_mode?: AIControlMode;
   created_at: string;
   updated_at: string;
 };
@@ -90,6 +92,8 @@ export type Message = {
     ai_escalation?: boolean;
     escalation?: boolean;
     ticket_id?: string;
+    suggestion?: boolean;
+    suggestion_status?: string;
   };
 };
 
@@ -109,11 +113,18 @@ export type Ticket = {
 export type AIConfig = {
   enabled: boolean;
   mode: AIMode;
+  mode_display?: string;
   auto_reply_threshold: number;
   escalation_threshold: number;
+  min_relevance_score?: number;
+  require_knowledge?: boolean;
+  escalate_if_unknown?: boolean;
+  multilingual_enabled?: boolean;
+  missed_chat_timeout_minutes?: number;
   allowed_intents: string[] | null;
   restricted_intents: string[] | null;
   intent_team_map: Record<string, string> | null;
+  channel_overrides?: { channel: string; mode: AIMode | null }[];
 };
 
 export type AIRunSummary = {
@@ -127,6 +138,9 @@ export type AIRunSummary = {
   intent: string | null;
   retrieval_count: number | null;
   confidence: number | null;
+  grounding_score?: number | null;
+  decision?: string | null;
+  estimated_cost_usd?: number | null;
   latency_ms: number | null;
   error: string | null;
   created_at: string;
@@ -136,6 +150,8 @@ export type AIRunDetail = AIRunSummary & {
   input: Record<string, unknown>;
   output: Record<string, unknown> | null;
   token_usage: Record<string, unknown> | null;
+  confidence_components?: Record<string, unknown> | null;
+  trace?: Record<string, unknown>[] | null;
 };
 
 export type AITestResponse = {

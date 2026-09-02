@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     ai_retrieval_top_k: int = 10
     ai_final_top_k: int = 5
     ai_context_message_limit: int = 20
+    ai_context_recent_message_limit: int = 10
+    ai_summary_message_threshold: int = 20
     ai_min_retrieval_score: float = 0.35
     support_agent_graph_version: str = "support-agent-v1"
 

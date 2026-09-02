@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.infrastructure.database.models import ChannelType, ConversationStatus, Priority, SenderType
+from app.infrastructure.database.models import AIControlMode, ChannelType, ConversationStatus, Priority, SenderType
 
 
 class ConversationCreate(BaseModel):
@@ -32,6 +32,7 @@ class ConversationOut(BaseModel):
     assigned_user_id: str | None
     assigned_team_id: str | None
     subject: str | None
+    ai_control_mode: AIControlMode = AIControlMode.AI_CONTROL
     created_at: datetime
     updated_at: datetime
 

@@ -27,6 +27,9 @@ class TicketOut(BaseModel):
     priority: Priority
     assigned_user_id: str | None
     assigned_team_id: str | None
+    title: str | None = None
+    source: str | None = None
+    description: str | None = None
     created_at: datetime
     resolved_at: datetime | None
     closed_at: datetime | None

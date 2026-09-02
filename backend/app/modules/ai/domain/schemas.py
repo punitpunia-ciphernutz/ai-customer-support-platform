@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.modules.ai.domain.models import AIMode, AIRunStatus, AIRunType
+from app.modules.ai.domain.models import AIMode, AIRunStatus, AIRunType, EvaluationBehavior, SentimentLabel
 
 
 class AIRunInput(BaseModel):
@@ -77,6 +77,97 @@ class ConversationTurn(BaseModel):
 class AgentDecision(StrEnum):
     AI_RESOLVE = "AI_RESOLVE"
     ESCALATE = "ESCALATE"
+    SUGGEST_ONLY = "SUGGEST_ONLY"
+
+
+class ConfidenceComponents(BaseModel):
+    intent: float = Field(ge=0.0, le=1.0)
+    retrieval: float = Field(ge=0.0, le=1.0)
+    grounding: float = Field(ge=0.0, le=1.0)
+    context: float = Field(ge=0.0, le=1.0)
+    policy: float = Field(ge=0.0, le=1.0)
+    response_validation: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
+class ConfidenceBreakdown(BaseModel):
+    final: float = Field(ge=0.0, le=1.0)
+    components: ConfidenceComponents
+    decision: AgentDecision
+    reasons: list[str] = Field(default_factory=list)
+
+
+class GroundingResult(BaseModel):
+    grounded: bool
+    score: float = Field(ge=0.0, le=1.0)
+    unsupported_claims: list[str] = Field(default_factory=list)
+
+
+class AIRunTraceStep(BaseModel):
+    name: str
+    status: str
+    duration_ms: int = 0
+    input_summary: str | None = None
+    output_summary: str | None = None
+    error: str | None = None
+
+
+class AIHandoffPackage(BaseModel):
+    customer_name: str
+    customer_company: str | None = None
+    issue_summary: str
+    intent: str
+    ai_confidence: float
+    confidence_breakdown: ConfidenceBreakdown | None = None
+    knowledge_searched: list[str] = Field(default_factory=list)
+    what_ai_tried: str
+    why_escalated: str
+    recommended_action: str
+    sentiment: str | None = None
+    language: str | None = None
+
+
+class EvaluationCase(BaseModel):
+    input: str
+    expected_intent: IntentLabel | None = None
+    expected_behavior: EvaluationBehavior
+    expected_answer_contains: list[str] = Field(default_factory=list)
+    expected_escalation: bool = False
+    knowledge_documents: list[str] = Field(default_factory=list)
+    category: str = "FAQ"
+
+
+class EvaluationCaseResult(BaseModel):
+    case_index: int
+    input: str
+    passed: bool
+    expected: dict[str, Any]
+    actual: dict[str, Any]
+    scores: dict[str, float] = Field(default_factory=dict)
+
+
+class EvaluationReport(BaseModel):
+    evaluation_id: str
+    name: str
+    total_cases: int
+    passed_cases: int
+    failed_cases: int
+    intent_accuracy: float
+    grounding_rate: float
+    escalation_accuracy: float
+    answer_quality: float
+    results: list[EvaluationCaseResult] = Field(default_factory=list)
+
+
+class BotConfigurationOut(BaseModel):
+    channel: str
+    mode: AIMode | None = None
+    auto_reply_threshold: float | None = None
+    escalation_threshold: float | None = None
+    min_relevance_score: float | None = None
+    require_knowledge: bool | None = None
+    multilingual_enabled: bool | None = None
+
+    model_config = {"from_attributes": True}
 
 
 class SupportAgentState(BaseModel):
@@ -85,15 +176,25 @@ class SupportAgentState(BaseModel):
     organization_id: str | None = None
     customer_context: CustomerContext | None = None
     conversation_history: list[ConversationTurn] = Field(default_factory=list)
+    conversation_summary: str | None = None
+    previous_ai_responses: list[str] = Field(default_factory=list)
+    ticket_context: dict[str, Any] | None = None
+    channel: str | None = None
+    ai_control_mode: str = "AI_CONTROL"
+    language: str = "en"
     user_message: str = ""
+    prepared_query: str = ""
     intent: IntentLabel | None = None
     intent_confidence: float = 0.0
     retrieved_documents: list[RetrievedDocument] = Field(default_factory=list)
     retrieval_score: float = 0.0
+    knowledge_available: bool = True
     draft_response: str = ""
     grounded: bool = False
+    grounding_score: float = 0.0
     citations: list[Citation] = Field(default_factory=list)
     support_confidence: float = 0.0
+    confidence_breakdown: ConfidenceBreakdown | None = None
     sentiment: str = "neutral"
     escalation_required: bool = False
     escalation_reason: str | None = None
@@ -101,6 +202,8 @@ class SupportAgentState(BaseModel):
     decision: AgentDecision | None = None
     final_response: str | None = None
     human_requested: bool = False
+    trace_steps: list[AIRunTraceStep] = Field(default_factory=list)
+    prompt_version: str | None = None
 
     model_config = {"extra": "ignore"}
 
@@ -143,11 +246,20 @@ class AITestResponse(BaseModel):
 class AIConfigOut(BaseModel):
     enabled: bool
     mode: AIMode
+    mode_display: str | None = None
     auto_reply_threshold: float
     escalation_threshold: float
+    min_relevance_score: float = 0.35
+    require_knowledge: bool = True
+    escalate_if_unknown: bool = True
+    multilingual_enabled: bool = True
+    hybrid_keyword_weight: float = 0.3
+    missed_chat_timeout_minutes: int = 5
+    business_hours: dict[str, Any] | None = None
     allowed_intents: list[str] | None = None
     restricted_intents: list[str] | None = None
     intent_team_map: dict[str, str] | None = None
+    channel_overrides: list[BotConfigurationOut] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -157,6 +269,13 @@ class AIConfigUpdate(BaseModel):
     mode: AIMode | None = None
     auto_reply_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     escalation_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    min_relevance_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    require_knowledge: bool | None = None
+    escalate_if_unknown: bool | None = None
+    multilingual_enabled: bool | None = None
+    hybrid_keyword_weight: float | None = Field(default=None, ge=0.0, le=1.0)
+    missed_chat_timeout_minutes: int | None = Field(default=None, ge=1, le=1440)
+    business_hours: dict[str, Any] | None = None
     allowed_intents: list[str] | None = None
     restricted_intents: list[str] | None = None
     intent_team_map: dict[str, str] | None = None
@@ -170,9 +289,16 @@ class AIRunSummary(BaseModel):
     status: AIRunStatus
     model: str | None
     graph_version: str | None
+    prompt_version: str | None = None
     intent: str | None
     retrieval_count: int | None
+    retrieval_score: float | None = None
+    grounding_score: float | None = None
     confidence: float | None
+    decision: str | None = None
+    language: str | None = None
+    sentiment: str | None = None
+    estimated_cost_usd: float | None = None
     latency_ms: int | None
     error: str | None
     created_at: datetime
@@ -184,5 +310,7 @@ class AIRunDetail(AIRunSummary):
     input: dict[str, Any] = Field(default_factory=dict)
     output: dict[str, Any] | None = None
     token_usage: dict[str, Any] | None = None
+    confidence_components: dict[str, Any] | None = None
+    trace: list[dict[str, Any]] | None = None
 
     model_config = {"from_attributes": True}

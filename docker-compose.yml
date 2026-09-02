@@ -75,6 +75,26 @@ services:
       - ./backend:/app
       - knowledge_uploads:/tmp/support-knowledge
 
+  beat:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://support:support@postgres:5432/support
+      DATABASE_URL_SYNC: postgresql+psycopg2://support:support@postgres:5432/support
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.workers.celery_app beat --loglevel=info
+    volumes:
+      - ./backend:/app
+
   frontend:
     build:
       context: ./frontend

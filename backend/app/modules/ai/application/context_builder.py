@@ -1,4 +1,4 @@
-"""Build conversation + customer context for the support agent."""
+"""Build conversation + customer context for the support agent (Day 4 v2)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
-from app.infrastructure.database.models import Conversation, Customer, Message, SenderType
+from app.infrastructure.database.models import (
+    Conversation,
+    Customer,
+    Message,
+    SenderType,
+    Ticket,
+    TicketStatus,
+)
 from app.modules.ai.domain.schemas import ConversationTurn, CustomerContext, SupportAgentState
 
 
@@ -40,7 +47,7 @@ class ContextBuilder:
     ) -> SupportAgentState:
         result = await self.db.execute(
             select(Conversation)
-            .options(selectinload(Conversation.customer))
+            .options(selectinload(Conversation.customer), selectinload(Conversation.tickets))
             .where(Conversation.id == conversation_id)
         )
         conversation = result.scalar_one_or_none()
@@ -71,12 +78,26 @@ class ContextBuilder:
             prior = all_messages[:-1] if all_messages else []
             user_message = all_messages[-1].content if all_messages else ""
 
-        limit = self.settings.ai_context_message_limit
-        recent = prior[-limit:] if limit else prior
+        recent_limit = self.settings.ai_context_recent_message_limit
+        recent = prior[-recent_limit:] if recent_limit else prior
 
         history = [
             ConversationTurn(sender_type=m.sender_type.value, content=m.content) for m in recent
         ]
+
+        previous_ai = [
+            m.content
+            for m in reversed(prior)
+            if m.sender_type == SenderType.AI and not (m.metadata_ or {}).get("internal")
+        ][:3]
+        previous_ai.reverse()
+
+        ticket_context = await self._load_ticket_context(conversation)
+
+        channel = conversation.channel
+        channel_value = channel.value if hasattr(channel, "value") else channel
+        control_mode = conversation.ai_control_mode
+        control_value = control_mode.value if hasattr(control_mode, "value") else control_mode
 
         return SupportAgentState(
             conversation_id=conversation_id,
@@ -90,5 +111,35 @@ class ContextBuilder:
                 metadata=dict(customer.metadata_ or {}),
             ),
             conversation_history=history,
+            conversation_summary=conversation.conversation_summary,
+            previous_ai_responses=previous_ai,
+            ticket_context=ticket_context,
+            channel=channel_value,
+            ai_control_mode=control_value,
             user_message=user_message,
         )
+
+    async def _load_ticket_context(self, conversation: Conversation) -> dict | None:
+        open_statuses = {TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.WAITING}
+        tickets = getattr(conversation, "tickets", None) or []
+        open_ticket = next((t for t in tickets if t.status in open_statuses), None)
+        if open_ticket is None:
+            result = await self.db.execute(
+                select(Ticket)
+                .where(
+                    Ticket.conversation_id == conversation.id,
+                    Ticket.status.in_(list(open_statuses)),
+                )
+                .order_by(Ticket.created_at.desc())
+                .limit(1)
+            )
+            open_ticket = result.scalar_one_or_none()
+        if open_ticket is None:
+            return None
+        return {
+            "ticket_id": open_ticket.id,
+            "status": open_ticket.status.value,
+            "priority": open_ticket.priority.value,
+            "title": open_ticket.title,
+            "source": open_ticket.source.value if open_ticket.source else None,
+        }

@@ -7,7 +7,8 @@ from app.infrastructure.database.models import User
 from app.infrastructure.database.session import get_db
 from app.modules.ai.application.ai_config_service import get_or_create_ai_config, update_ai_config
 from app.modules.ai.application.ai_service import AIService
-from app.modules.ai.domain.models import AIRun
+from app.modules.ai.application.evaluation_service import EvaluationService
+from app.modules.ai.domain.models import AI_MODE_DISPLAY, AIRun, BotConfiguration
 from app.modules.ai.domain.schemas import (
     AIConfigOut,
     AIConfigUpdate,
@@ -15,8 +16,10 @@ from app.modules.ai.domain.schemas import (
     AIRunSummary,
     AITestRequest,
     AITestResponse,
+    BotConfigurationOut,
     ClassifyRequest,
     ClassifyResponse,
+    EvaluationReport,
 )
 from app.modules.auth.permissions import AI_READ, AI_WRITE, CONVERSATIONS_READ
 
@@ -102,13 +105,23 @@ async def get_ai_run(
     return run
 
 
+async def _config_out(db: AsyncSession, organization_id: str) -> AIConfigOut:
+    config = await get_or_create_ai_config(db, organization_id)
+    overrides = await db.execute(
+        select(BotConfiguration).where(BotConfiguration.organization_id == organization_id)
+    )
+    out = AIConfigOut.model_validate(config)
+    out.mode_display = AI_MODE_DISPLAY.get(config.mode, config.mode.value)
+    out.channel_overrides = [BotConfigurationOut.model_validate(o) for o in overrides.scalars().all()]
+    return out
+
+
 @router.get("/config", response_model=AIConfigOut)
 async def get_ai_config(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(AI_READ)),
 ) -> AIConfigOut:
-    config = await get_or_create_ai_config(db, user.organization_id)
-    return AIConfigOut.model_validate(config)
+    return await _config_out(db, user.organization_id)
 
 
 @router.patch("/config", response_model=AIConfigOut)
@@ -117,5 +130,24 @@ async def patch_ai_config(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(AI_WRITE)),
 ) -> AIConfigOut:
-    config = await update_ai_config(db, user.organization_id, body)
-    return AIConfigOut.model_validate(config)
+    await update_ai_config(db, user.organization_id, body)
+    return await _config_out(db, user.organization_id)
+
+
+@router.get("/evaluations")
+async def list_evaluations(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(AI_READ)),
+):
+    ev = await EvaluationService(db).get_or_create_evaluation(user.organization_id)
+    return {"id": ev.id, "name": ev.name, "case_count": ev.case_count, "version": ev.version}
+
+
+@router.post("/evaluations/run", response_model=EvaluationReport)
+async def run_evaluations(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(AI_WRITE)),
+) -> EvaluationReport:
+    report = await EvaluationService(db).run_suite(user.organization_id)
+    await db.commit()
+    return report

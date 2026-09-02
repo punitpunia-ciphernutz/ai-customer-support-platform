@@ -117,3 +117,22 @@ async def _run_process_ai_message(message_id: str) -> str:
 @celery_app.task(name="app.workers.tasks.process_ai_message", bind=True, max_retries=1)
 def process_ai_message(self, message_id: str) -> str:  # type: ignore[no-untyped-def]
     return run_async(lambda: _run_process_ai_message(message_id))
+
+
+async def _run_process_missed_chats() -> int:
+    async with AsyncSessionLocal() as session:
+        from app.modules.ai.application.missed_chat_service import MissedChatService
+
+        try:
+            count = await MissedChatService(session).process_timeouts()
+            await session.commit()
+            return count
+        except Exception:
+            await session.rollback()
+            logger.exception("Missed chat timeout processing failed")
+            raise
+
+
+@celery_app.task(name="app.workers.tasks.process_missed_chats")
+def process_missed_chats() -> int:  # type: ignore[no-untyped-def]
+    return run_async(_run_process_missed_chats)

@@ -24,7 +24,9 @@ __all__ = [
     "Base",
     "ChannelType",
     "Conversation",
+    "AIControlMode",
     "ConversationStatus",
+    "TicketSource",
     "Customer",
     "Message",
     "Organization",
@@ -58,7 +60,21 @@ class ChannelType(StrEnum):
 class ConversationStatus(StrEnum):
     OPEN = "OPEN"
     PENDING = "PENDING"
+    WAITING_FOR_AGENT = "WAITING_FOR_AGENT"
     CLOSED = "CLOSED"
+
+
+class AIControlMode(StrEnum):
+    AI_CONTROL = "AI_CONTROL"
+    HUMAN_CONTROL = "HUMAN_CONTROL"
+
+
+class TicketSource(StrEnum):
+    AI_ESCALATION = "AI_ESCALATION"
+    MISSED_CHAT = "MISSED_CHAT"
+    AGENT_CREATED = "AGENT_CREATED"
+    HELP_CENTER = "HELP_CENTER"
+    AUTOMATION = "AUTOMATION"
 
 
 class Priority(StrEnum):
@@ -205,6 +221,10 @@ class Conversation(Base):
     assigned_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
     assigned_team_id: Mapped[str | None] = mapped_column(ForeignKey("teams.id"), index=True)
     subject: Mapped[str | None] = mapped_column(String(512))
+    ai_control_mode: Mapped[AIControlMode] = mapped_column(
+        Enum(AIControlMode, name="ai_control_mode"), default=AIControlMode.AI_CONTROL, nullable=False
+    )
+    conversation_summary: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -253,6 +273,12 @@ class Ticket(Base):
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
     conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id"), nullable=False, index=True)
+    customer_id: Mapped[str | None] = mapped_column(ForeignKey("customers.id"), index=True)
+    source: Mapped[TicketSource] = mapped_column(
+        Enum(TicketSource, name="ticket_source"), default=TicketSource.AGENT_CREATED, nullable=False
+    )
+    title: Mapped[str | None] = mapped_column(String(512))
+    description: Mapped[str | None] = mapped_column(Text)
     status: Mapped[TicketStatus] = mapped_column(
         Enum(TicketStatus, name="ticket_status"), default=TicketStatus.OPEN
     )

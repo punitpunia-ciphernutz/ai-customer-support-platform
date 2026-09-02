@@ -105,3 +105,67 @@ async def public_list_messages(
     db: AsyncSession = Depends(get_db),
 ) -> list[Message]:
     return await ConversationService(db).list_public_messages(conversation_id, customer_id)
+
+
+@router.post("/conversations/{conversation_id}/takeover", response_model=ConversationOut)
+async def takeover_conversation(
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
+) -> Conversation:
+    return await ConversationService(db).takeover(user, conversation_id)
+
+
+@router.post("/conversations/{conversation_id}/return-to-ai", response_model=ConversationOut)
+async def return_conversation_to_ai(
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
+) -> Conversation:
+    return await ConversationService(db).return_to_ai(user, conversation_id)
+
+
+@router.post("/conversations/{conversation_id}/ticket", status_code=201)
+async def create_conversation_ticket(
+    conversation_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
+):
+    from app.modules.tickets.schemas import TicketOut
+
+    ticket = await ConversationService(db).create_ticket_from_conversation(user, conversation_id)
+    return TicketOut.model_validate(ticket)
+
+
+@router.post("/conversations/{conversation_id}/suggestions/{message_id}/accept", response_model=MessageOut)
+async def accept_suggestion(
+    conversation_id: str,
+    message_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
+) -> Message:
+    return await ConversationService(db).update_suggestion_status(
+        user, conversation_id, message_id, "accepted", event="suggestion.accepted"
+    )
+
+
+@router.post("/conversations/{conversation_id}/suggestions/{message_id}/reject", response_model=MessageOut)
+async def reject_suggestion(
+    conversation_id: str,
+    message_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
+) -> Message:
+    return await ConversationService(db).update_suggestion_status(
+        user, conversation_id, message_id, "rejected", event="suggestion.rejected"
+    )
+
+
+@router.post("/conversations/{conversation_id}/suggestions/{message_id}/regenerate", response_model=MessageOut)
+async def regenerate_suggestion(
+    conversation_id: str,
+    message_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
+) -> Message:
+    return await ConversationService(db).regenerate_suggestion(user, conversation_id, message_id)

@@ -20,6 +20,12 @@ async def get_or_create_ai_config(db: AsyncSession, organization_id: str) -> AIC
         mode=AIMode.AUTO_REPLY,
         auto_reply_threshold=0.85,
         escalation_threshold=0.85,
+        min_relevance_score=0.35,
+        require_knowledge=True,
+        escalate_if_unknown=True,
+        multilingual_enabled=True,
+        hybrid_keyword_weight=0.3,
+        missed_chat_timeout_minutes=5,
         restricted_intents=["OTHER"],
         intent_team_map={
             "BILLING": "Billing",

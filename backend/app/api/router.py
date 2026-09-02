@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.modules.agents.router import router as agents_router
 from app.modules.ai.api.routes import router as ai_router
 from app.modules.auth.router import router as auth_router
 from app.modules.conversations.router import router as conversations_router
@@ -23,3 +24,4 @@ api_router.include_router(tickets_router)
 api_router.include_router(teams_router)
 api_router.include_router(knowledge_router)
 api_router.include_router(ai_router)
+api_router.include_router(agents_router)

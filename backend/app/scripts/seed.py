@@ -4,10 +4,49 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.infrastructure.database.models import Organization, Role, RoleName, Team, TeamMember, User
-from app.modules.ai.domain.models import AIConfig, AIMode
+from app.infrastructure.database.models import ChannelType, Organization, Role, RoleName, Team, TeamMember, User
+from app.modules.ai.domain.models import (
+    AgentAvailability,
+    AIEvaluation,
+    AIConfig,
+    AIMode,
+    BotConfiguration,
+    Prompt,
+    PromptVersion,
+)
+from app.modules.ai.prompts.seed_templates import (
+    DEFAULT_BUSINESS_HOURS,
+    GROUNDING_VALIDATOR_TEMPLATE,
+    SUPPORT_AGENT_SYSTEM_TEMPLATE,
+)
 from app.modules.auth.permissions import ROLE_PERMISSIONS
 from app.modules.auth.security import hash_password
+
+
+def _seed_prompts(session: Session) -> None:
+    prompts = [
+        ("support_agent_system", "Support agent generation prompt", SUPPORT_AGENT_SYSTEM_TEMPLATE),
+        ("grounding_validator", "Post-generation grounding check", GROUNDING_VALIDATOR_TEMPLATE),
+    ]
+    for name, description, template in prompts:
+        prompt = session.scalar(select(Prompt).where(Prompt.name == name))
+        if prompt is None:
+            prompt = Prompt(name=name, description=description)
+            session.add(prompt)
+            session.flush()
+        existing = session.scalar(
+            select(PromptVersion).where(PromptVersion.prompt_id == prompt.id, PromptVersion.version == 1)
+        )
+        if existing is None:
+            session.add(
+                PromptVersion(
+                    prompt_id=prompt.id,
+                    version=1,
+                    template=template,
+                    active=True,
+                    configuration={},
+                )
+            )
 
 
 def seed() -> None:
@@ -73,6 +112,13 @@ def seed() -> None:
                     mode=AIMode.AUTO_REPLY,
                     auto_reply_threshold=0.85,
                     escalation_threshold=0.85,
+                    min_relevance_score=0.35,
+                    require_knowledge=True,
+                    escalate_if_unknown=True,
+                    multilingual_enabled=True,
+                    hybrid_keyword_weight=0.3,
+                    business_hours=DEFAULT_BUSINESS_HOURS,
+                    missed_chat_timeout_minutes=5,
                     restricted_intents=["OTHER"],
                     intent_team_map={
                         "BILLING": "Billing",
@@ -81,6 +127,65 @@ def seed() -> None:
                     },
                 )
             )
+        else:
+            if ai_config.business_hours is None:
+                ai_config.business_hours = DEFAULT_BUSINESS_HOURS
+
+        for channel, mode in [
+            (ChannelType.WEB_CHAT.value, AIMode.AUTO_REPLY),
+            (ChannelType.EMAIL.value, AIMode.SUGGEST),
+            (ChannelType.FORM.value, AIMode.DRAFT_ONLY),
+        ]:
+            bot_cfg = session.scalar(
+                select(BotConfiguration).where(
+                    BotConfiguration.organization_id == org.id,
+                    BotConfiguration.channel == channel,
+                )
+            )
+            if bot_cfg is None:
+                session.add(
+                    BotConfiguration(
+                        organization_id=org.id,
+                        channel=channel,
+                        mode=mode,
+                    )
+                )
+
+        availability = session.scalar(select(AgentAvailability).where(AgentAvailability.user_id == agent.id))
+        if availability is None:
+            session.add(
+                AgentAvailability(
+                    user_id=agent.id,
+                    organization_id=org.id,
+                    is_online=True,
+                    timezone="UTC",
+                    schedule=DEFAULT_BUSINESS_HOURS["schedule"],
+                )
+            )
+
+        _seed_prompts(session)
+
+        evaluation = session.scalar(
+            select(AIEvaluation).where(
+                AIEvaluation.organization_id == org.id,
+                AIEvaluation.name == "Day 4 Baseline",
+            )
+        )
+        from app.modules.ai.application.evaluation_service import EVALUATION_CASES
+
+        if evaluation is None:
+            session.add(
+                AIEvaluation(
+                    organization_id=org.id,
+                    name="Day 4 Baseline",
+                    version=1,
+                    case_count=len(EVALUATION_CASES),
+                    cases=EVALUATION_CASES,
+                )
+            )
+        else:
+            evaluation.case_count = len(EVALUATION_CASES)
+            evaluation.cases = EVALUATION_CASES
 
         session.commit()
         print(f"Seeded org={org.id} agent={settings.seed_agent_email}")

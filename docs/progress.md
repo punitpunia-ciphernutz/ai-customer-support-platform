@@ -1,69 +1,61 @@
 # Progress — AI Customer Support Platform
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 ## Status summary
 
-**Day 1, Day 2, and Day 3 are complete.** The platform now runs a full async AI support agent: customer messages trigger Celery → LangGraph → knowledge retrieval → grounded answers or human escalation with tickets.
+**Day 1, Day 2, Day 3, and Day 4 are complete (re-audited 2026-09-01).** The platform now has production-control AI: hybrid retrieval, grounding validation, explainable confidence, bot modes with takeover/kill switch, AI handoff packages, run tracing, evaluation suite (25 cases), channel overrides, Celery Beat missed-chat processing, and updated agent UI.
 
-**Frontend UI (Day 3 follow-up):** Tickets, Teams, and Settings pages are fully wired to backend APIs with loading/empty/error/success states. Settings consolidates all AI configuration (thresholds, intents, team routing, test console, run history).
+**Frontend UI:** Settings uses spec mode names (Knowledge Base / Suggest Reply / Autopilot), per-channel override table, evaluation runner, run trace/grounding/token detail. Inbox has takeover/return-to-AI, suggestion panel with Use/Edit/Regenerate/Ignore, and grounding warnings.
 
-LLM: **Google Gemini** (`gemini-3.1-flash-lite`) when `GEMINI_API_KEY` is set; otherwise **Echo/heuristic** classifier + offline lexical embeddings for local demos/tests.
+LLM: **Google Gemini** when `GEMINI_API_KEY` is set; otherwise **Echo/heuristic** + offline lexical embeddings. Unset `GEMINI_API_KEY` for fully offline tests (avoids embedding quota errors).
 
-## Day 1 — Completed
-
-| Phase | Work |
-|-------|------|
-| A–P | Support Core (auth, org, customers, conversations, tickets, WS, Celery, React inbox) |
-| Hardening | `ConversationService`; ChannelAdapter; inbox assign/close; audit; OTel |
-
-## Day 2 — Completed
+## Day 4 — Completed
 
 | Phase | Work |
 |-------|------|
-| A–I | Knowledge module, ingestion, pgvector search, classification graph, Knowledge UI, tests |
+| 1 | Migration `0005_day4_ai_reliability`: prompts, bot configs, evaluation tables, extended `AIRun`/`AIConfig`, `Conversation.ai_control_mode`, ticket source/handoff fields |
+| 2 | ContextBuilder v2 + `ConversationSummarizer` + graph `load_context` |
+| 3 | Hybrid retrieval (semantic + keyword), `RelevanceGate`, conditional knowledge branch |
+| 4 | `GroundingValidator` + graph `grounding_check` node |
+| 5 | `confidence_service.py` — explainable `ConfidenceBreakdown` persisted on runs |
+| 6 | LangGraph v2 (`support-agent-v2`): prepare_query → retrieve → gate → generate → ground → confidence → decision; step tracing |
+| 7 | Bot modes (Knowledge Base / Suggest / Autopilot), takeover/return-to-AI APIs, kill switch + human control guards, **`RuntimeAIConfig` channel overrides** |
+| 8 | `AvailabilityService`, `MissedChatService`, `WAITING_FOR_AGENT`, `/agents/availability`, **Celery Beat `process_missed_chats`** |
+| 9 | `EscalationService` handoff package, ticket sources, `/conversations/{id}/ticket` |
+| 10 | Run trace JSON, cost estimator, extended run detail API |
+| 11 | `PromptService` + DB-seeded prompt versions |
+| 12 | `EvaluationService` — 25 cases, `GET/POST /ai/evaluations` |
+| 13 | Language from classify node, sentiment normalization, routing priority |
+| 14 | Settings + Inbox UI (suggestions, takeover, diagnostics) |
 
-## Day 3 — Completed
+## Day 4 tests
+
+`backend/tests/test_day4_*.py` — **16 tests** (models, context, retrieval, grounding, takeover, evaluation suite).
+
+Run: `docker compose exec backend pytest -q tests/test_day4_phase1_models.py tests/test_day4_phase2_context.py tests/test_day4_phase3_retrieval.py tests/test_day4_acceptance.py`
+
+## Day 3 — Completed (prior)
 
 | Phase | Work |
 |-------|------|
-| 1 | Extended `AIRun` + `ai_configs` migration (`0004_day3_ai_agent`); `SupportAgentState`, `AIResponse`, API DTOs |
-| 2 | `ContextBuilder` — recent history + customer context |
-| 3–7 | LangGraph Support Agent: intent, retrieval, rerank, grounded generation, confidence, decision |
-| 8 | Idempotency via `processing_key` + `trigger_message_id`; lifecycle `PENDING` → `RUNNING` → `COMPLETED`/`FAILED`; FAILED retries reuse same run |
-| 9 | Celery `process_ai_message` + `message.created` → async enqueue |
-| 10–11 | AI replies via WebSocket; escalation → ticket + internal note + customer handoff |
-| 12 | APIs: `POST /ai/test`, `GET /ai/runs`, `GET/PATCH /ai/config` |
-| 13 | React: AI bubbles (Web Chat + Inbox), agent AI diagnostics panel, AI toggle/mode |
-| 14 | `tests/test_day3_agent.py` — **17 tests** (all 6 spec scenarios, lifecycle, idempotency, Celery→WS event) |
+| 1–14 | Working AI agent, Celery async, escalation, basic UI — see `docs/day3-implementation-plan.md` |
 
-## Frontend — Completed pages
+## Documentation
 
-| Page | Backend APIs used | Notes |
-|------|-------------------|-------|
-| **Inbox** | conversations, messages, customers, users, teams | Assign/close, AI diagnostics panel, WS realtime |
-| **Customers** | GET/POST `/customers` | Create + list with loading/error/success states |
-| **Knowledge** | knowledge sources, documents, upload, delete | Ingestion status polling |
-| **Tickets** | GET/POST/PATCH `/tickets` | List, filter, create, assign, resolve/close; WS ticket events |
-| **Teams** | GET/POST `/teams`, GET `/users` | Create teams, list members (no member CRUD API yet) |
-| **Settings** | GET/PATCH `/ai/config`, GET `/ai/runs`, POST `/ai/test` | Full AI config, intent routing, test console, run history |
-| **Web Chat** | public conversations/messages + WS | Customer-facing demo |
+- Day 4 plan: [`docs/day4-implementation-plan.md`](day4-implementation-plan.md)
+- Day 4 schema: [`docs/database/day4-schema.md`](database/day4-schema.md)
+- Run guide: [`docs/run-guide.md`](run-guide.md)
 
 ## Default credentials
 
 - Email: `agent@example.com`
 - Password: `agent123!`
 
-## Verification notes
+## Notes
 
-- **AI mode** defaults to `AUTO_REPLY` (seed). Configure in **Settings → AI Support** or via `PATCH /ai/config`.
-- Celery worker must run for async AI replies from Web Chat (`docker compose up worker`).
-- Customer public chat hides `metadata.internal` messages (escalation notes).
-- Without `GEMINI_API_KEY`: Echo LLM + offline embeddings (sufficient for demos/tests).
-- With `GEMINI_API_KEY`: Gemini embeddings + structured LLM output.
-- **Tickets page** shows AI-escalated and manually created tickets; filter by status, assign agents/teams, resolve/close.
-- **Settings page** is the single place for AI thresholds, allowed/restricted intents, intent→team routing, test console, and run history.
-- **Teams page** creates teams and lists org users; team membership API not yet available.
-- **Day 3 audit:** [`docs/day3-audit.md`](day3-audit.md) — all 24 requirements complete.
-- Audit detail: [`docs/day1-day2-final-audit.md`](day1-day2-final-audit.md)
-- Day 3 plan: [`docs/day3-implementation-plan.md`](day3-implementation-plan.md)
+- **Graph version:** `support-agent-v2`
+- **Evaluation:** Settings → Run evaluation suite, or `POST /api/v1/ai/evaluations/run`
+- **Takeover:** Inbox thread → Takeover / Return to AI
+- **Suggest mode:** AI suggestions appear as internal messages; Use Reply in inbox composer
+- Integration tests that hit Gemini embeddings may fail on quota — use offline Echo for CI

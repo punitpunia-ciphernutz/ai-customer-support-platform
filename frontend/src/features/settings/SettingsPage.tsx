@@ -147,9 +147,9 @@ export function SettingsPage() {
                   onChange={(e) => patchConfig.mutate({ mode: e.target.value as AIMode })}
                   disabled={patchConfig.isPending}
                 >
-                  <option value="DRAFT_ONLY">Draft Only — no customer replies</option>
-                  <option value="SUGGEST">Suggest — drafts for agents</option>
-                  <option value="AUTO_REPLY">Auto Reply — sends to customers</option>
+                  <option value="DRAFT_ONLY">Knowledge Base — send when grounded, else escalate</option>
+                  <option value="SUGGEST">Suggest Reply — drafts for agents only</option>
+                  <option value="AUTO_REPLY">Autopilot — auto-send when confident</option>
                 </select>
               </div>
             </div>
@@ -194,8 +194,68 @@ export function SettingsPage() {
                 <span className="form-hint">Below this confidence, escalate to human (0–1)</span>
               </div>
             </div>
+
+            <div className="grid-2 mb-4">
+              <label className="flex items-center gap-2" style={{ cursor: "pointer", fontSize: "0.875rem" }}>
+                <input
+                  type="checkbox"
+                  checked={config.require_knowledge ?? true}
+                  onChange={(e) => patchConfig.mutate({ require_knowledge: e.target.checked })}
+                  disabled={patchConfig.isPending}
+                />
+                Require knowledge before answering
+              </label>
+              <label className="flex items-center gap-2" style={{ cursor: "pointer", fontSize: "0.875rem" }}>
+                <input
+                  type="checkbox"
+                  checked={config.escalate_if_unknown ?? true}
+                  onChange={(e) => patchConfig.mutate({ escalate_if_unknown: e.target.checked })}
+                  disabled={patchConfig.isPending}
+                />
+                Escalate if unknown
+              </label>
+              <label className="flex items-center gap-2" style={{ cursor: "pointer", fontSize: "0.875rem" }}>
+                <input
+                  type="checkbox"
+                  checked={config.multilingual_enabled ?? true}
+                  onChange={(e) => patchConfig.mutate({ multilingual_enabled: e.target.checked })}
+                  disabled={patchConfig.isPending}
+                />
+                Multilingual responses
+              </label>
+            </div>
+            {config.mode_display && (
+              <p className="form-hint">Display mode: {config.mode_display.replace(/_/g, " ")}</p>
+            )}
+            {config.channel_overrides.length > 0 && (
+              <div className="mt-4">
+                <h3 className="section-title" style={{ fontSize: "0.875rem" }}>Per-channel overrides</h3>
+                <table className="table-wrap" style={{ fontSize: "0.8125rem" }}>
+                  <thead>
+                    <tr>
+                      <th>Channel</th>
+                      <th>Mode</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {config.channel_overrides.map((o) => (
+                      <tr key={o.channel}>
+                        <td>{o.channel.replace(/_/g, " ")}</td>
+                        <td>{o.mode?.replace(/_/g, " ") ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
         )}
+      </section>
+
+      <section className="card mb-6">
+        <h2 className="section-title">AI Evaluation</h2>
+        <p className="form-hint mb-4">Run the Day 4 baseline suite (25 cases, offline Echo LLM in dev).</p>
+        <EvalRunButton />
       </section>
 
       {config && (
@@ -388,6 +448,12 @@ export function SettingsPage() {
                     <div><dt>Graph</dt><dd>{runDetail.data.graph_version ?? "—"}</dd></div>
                     <div><dt>Intent</dt><dd>{runDetail.data.intent ?? "—"}</dd></div>
                     <div><dt>Confidence</dt><dd>{formatPercent(runDetail.data.confidence)}</dd></div>
+                    {runDetail.data.grounding_score != null && (
+                      <div><dt>Grounding</dt><dd>{formatPercent(runDetail.data.grounding_score)}</dd></div>
+                    )}
+                    {runDetail.data.decision && (
+                      <div><dt>Decision</dt><dd>{runDetail.data.decision}</dd></div>
+                    )}
                     <div><dt>Retrieval</dt><dd>{runDetail.data.retrieval_count ?? "—"}</dd></div>
                     <div><dt>Latency</dt><dd>{runDetail.data.latency_ms != null ? `${runDetail.data.latency_ms}ms` : "—"}</dd></div>
                     <div><dt>Created</dt><dd>{formatDate(runDetail.data.created_at)}</dd></div>
@@ -399,6 +465,12 @@ export function SettingsPage() {
                     <details>
                       <summary className="text-sm text-muted" style={{ cursor: "pointer", marginBottom: "0.5rem" }}>Input</summary>
                       <pre style={{ background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 8, padding: "0.75rem", fontSize: "0.75rem", overflow: "auto", maxHeight: 200 }}>{JSON.stringify(runDetail.data.input, null, 2)}</pre>
+                    </details>
+                  )}
+                  {runDetail.data.trace && runDetail.data.trace.length > 0 && (
+                    <details style={{ marginTop: "0.75rem" }}>
+                      <summary className="text-sm text-muted" style={{ cursor: "pointer", marginBottom: "0.5rem" }}>Trace</summary>
+                      <pre style={{ background: "var(--bg-input)", border: "1px solid var(--border)", borderRadius: 8, padding: "0.75rem", fontSize: "0.75rem", overflow: "auto", maxHeight: 200 }}>{JSON.stringify(runDetail.data.trace, null, 2)}</pre>
                     </details>
                   )}
                   {runDetail.data.output && (
@@ -413,6 +485,42 @@ export function SettingsPage() {
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+function EvalRunButton() {
+  const [result, setResult] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const run = async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const report = await api<{
+        passed_cases: number;
+        total_cases: number;
+        intent_accuracy: number;
+        escalation_accuracy: number;
+      }>("/ai/evaluations/run", { method: "POST" });
+      setResult(
+        `Passed ${report.passed_cases}/${report.total_cases} · Intent ${Math.round(report.intent_accuracy * 100)}% · Escalation ${Math.round(report.escalation_accuracy * 100)}%`
+      );
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Evaluation failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <button type="button" className="btn btn-primary btn-sm" onClick={() => void run()} disabled={loading}>
+        {loading ? "Running…" : "Run evaluation suite"}
+      </button>
+      {result && <Alert type="success">{result}</Alert>}
+      {err && <Alert type="error">{err}</Alert>}
     </div>
   );
 }

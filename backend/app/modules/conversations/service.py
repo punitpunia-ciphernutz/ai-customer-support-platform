@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.infrastructure.audit import write_audit
 from app.infrastructure.database.models import (
     ActorType,
+    AIControlMode,
     Conversation,
     ConversationStatus,
     Customer,
@@ -336,6 +337,121 @@ class ConversationService:
             )
         )
         return conversation
+
+    async def takeover(self, user: User, conversation_id: str) -> Conversation:
+        conversation = await self.get_conversation(user.organization_id, conversation_id)
+        conversation.ai_control_mode = AIControlMode.HUMAN_CONTROL
+        await write_audit(
+            self.db,
+            organization_id=user.organization_id,
+            actor_type=ActorType.USER,
+            actor_id=user.id,
+            action="conversation.takeover",
+            entity_type="conversation",
+            entity_id=conversation_id,
+            new_value={"ai_control_mode": AIControlMode.HUMAN_CONTROL.value},
+        )
+        await self.db.flush()
+        await self.db.refresh(conversation)
+        return conversation
+
+    async def return_to_ai(self, user: User, conversation_id: str) -> Conversation:
+        conversation = await self.get_conversation(user.organization_id, conversation_id)
+        conversation.ai_control_mode = AIControlMode.AI_CONTROL
+        await write_audit(
+            self.db,
+            organization_id=user.organization_id,
+            actor_type=ActorType.USER,
+            actor_id=user.id,
+            action="conversation.return_to_ai",
+            entity_type="conversation",
+            entity_id=conversation_id,
+            new_value={"ai_control_mode": AIControlMode.AI_CONTROL.value},
+        )
+        await self.db.flush()
+        await self.db.refresh(conversation)
+        return conversation
+
+    async def create_ticket_from_conversation(self, user: User, conversation_id: str):
+        from app.infrastructure.database.models import TicketSource
+        from app.modules.ai.application.escalation_service import EscalationService
+        from app.modules.ai.domain.schemas import SupportAgentState
+
+        conversation = await self.get_conversation(user.organization_id, conversation_id)
+        state = SupportAgentState(
+            conversation_id=conversation.id,
+            organization_id=conversation.organization_id,
+            user_message="Agent-created ticket",
+            escalation_reason="Created by agent",
+        )
+        return await EscalationService(self.db)._create_ticket(  # noqa: SLF001
+            state,
+            organization_id=user.organization_id,
+            source=TicketSource.AGENT_CREATED,
+            ai_run_id=None,
+            intent_team_map={},
+        )
+
+    async def update_suggestion_status(
+        self,
+        user: User,
+        conversation_id: str,
+        suggestion_message_id: str,
+        status: str,
+        *,
+        event: str,
+    ) -> Message:
+        await self.get_conversation(user.organization_id, conversation_id)
+        msg = await self.db.get(Message, suggestion_message_id)
+        if msg is None or msg.conversation_id != conversation_id:
+            raise ValueError("Suggestion message not found")
+        if not msg.metadata_ or not msg.metadata_.get("suggestion"):
+            raise ValueError("Message is not an AI suggestion")
+        meta = dict(msg.metadata_)
+        meta["suggestion_status"] = status
+        meta["event"] = event
+        msg.metadata_ = meta
+        await self.db.flush()
+        await self.db.refresh(msg)
+        return msg
+
+    async def regenerate_suggestion(self, user: User, conversation_id: str, suggestion_message_id: str) -> Message:
+        from app.modules.ai.application.ai_service import AIService
+
+        conversation = await self.get_conversation(user.organization_id, conversation_id)
+        msg = await self.db.get(Message, suggestion_message_id)
+        if msg is None or msg.conversation_id != conversation_id:
+            raise ValueError("Suggestion message not found")
+        trigger_id = (msg.metadata_ or {}).get("trigger_message_id")
+        if not trigger_id:
+            raise ValueError("Suggestion missing trigger message")
+        await self.update_suggestion_status(
+            user,
+            conversation_id,
+            suggestion_message_id,
+            "rejected",
+            event="suggestion.rejected",
+        )
+        await AIService(self.db).run_support_agent(
+            conversation_id,
+            trigger_id,
+            persist_side_effects=True,
+            force=True,
+        )
+        result = await self.db.execute(
+            select(Message)
+            .where(
+                Message.conversation_id == conversation_id,
+                Message.metadata_["suggestion"].astext == "true",
+                Message.metadata_["suggestion_status"].astext == "generated",
+            )
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        )
+        new_suggestion = result.scalar_one_or_none()
+        if new_suggestion is None:
+            raise ValueError("Failed to regenerate suggestion")
+        return new_suggestion
 
     async def _get_customer(self, org_id: str, customer_id: str) -> Customer:
         result = await self.db.execute(

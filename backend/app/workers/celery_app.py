@@ -11,6 +11,12 @@ celery_app = Celery(
     include=["app.workers.tasks"],
 )
 celery_app.conf.task_default_queue = "celery"
+celery_app.conf.beat_schedule = {
+    "process-missed-chats-every-minute": {
+        "task": "app.workers.tasks.process_missed_chats",
+        "schedule": 60.0,
+    },
+}
 
 
 @celery_app.task(name="app.workers.tasks.hello_world")

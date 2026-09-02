@@ -1,9 +1,35 @@
-from app.modules.ai.domain.models import AIConfig, AIMode, AIRun, AIRunStatus, AIRunType
+from app.modules.ai.domain.models import (
+    AIConfig,
+    AIMode,
+    AI_MODE_DISPLAY,
+    AIRun,
+    AIRunStatus,
+    AIRunType,
+    AgentDecisionType,
+    AgentAvailability,
+    AIEvaluation,
+    AIEvaluationResult,
+    BotConfiguration,
+    EvaluationBehavior,
+    Prompt,
+    PromptVersion,
+    SentimentLabel,
+)
 
 __all__ = [
     "AIConfig",
     "AIMode",
+    "AI_MODE_DISPLAY",
     "AIRun",
     "AIRunStatus",
     "AIRunType",
+    "AgentDecisionType",
+    "AgentAvailability",
+    "AIEvaluation",
+    "AIEvaluationResult",
+    "BotConfiguration",
+    "EvaluationBehavior",
+    "Prompt",
+    "PromptVersion",
+    "SentimentLabel",
 ]

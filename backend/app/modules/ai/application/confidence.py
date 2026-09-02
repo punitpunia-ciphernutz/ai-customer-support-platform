@@ -1,19 +1,19 @@
-"""Deterministic support confidence scoring."""
+"""Deterministic support confidence scoring — delegates to Day 4 confidence service."""
 
 from __future__ import annotations
 
-from app.modules.ai.domain.schemas import SupportAgentState
+from app.modules.ai.application.confidence_service import (
+    calculate_confidence_breakdown,
+    calculate_support_confidence as _calculate_final,
+)
+from app.modules.ai.domain.models import AIConfig
+from app.modules.ai.domain.schemas import ConfidenceBreakdown, SupportAgentState
+
+__all__ = ["calculate_confidence_breakdown", "calculate_support_confidence"]
 
 
-def calculate_support_confidence(state: SupportAgentState) -> float:
-    intent_score = max(0.0, min(1.0, state.intent_confidence))
-    retrieval_score = max(0.0, min(1.0, state.retrieval_score))
-    grounding_score = 1.0 if state.grounded and state.citations else (0.4 if state.grounded else 0.2)
-    context_score = 1.0 if state.customer_context and state.user_message else 0.5
-    if state.conversation_history:
-        context_score = min(1.0, context_score + 0.1)
-    validation_score = 1.0 if state.draft_response.strip() else 0.0
-
-    weights = (0.2, 0.25, 0.25, 0.15, 0.15)
-    scores = (intent_score, retrieval_score, grounding_score, context_score, validation_score)
-    return round(sum(w * s for w, s in zip(weights, scores, strict=True)), 4)
+def calculate_support_confidence(
+    state: SupportAgentState,
+    config: AIConfig | None = None,
+) -> float:
+    return _calculate_final(state, config)

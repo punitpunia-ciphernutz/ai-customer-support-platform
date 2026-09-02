@@ -5,7 +5,7 @@ from __future__ import annotations
 from app.modules.ai.domain.schemas import SupportAgentState
 from app.modules.ai.application.context_builder import format_history_for_prompt
 
-PROMPT_VERSION = "support-agent-v1"
+PROMPT_VERSION = "support-agent-v2"
 
 
 def render_rerank_prompt(query: str, title: str, content: str) -> str:
@@ -35,6 +35,19 @@ def render_generate_prompt(state: SupportAgentState) -> str:
         customer_section = "\n".join(parts)
 
     history_section = format_history_for_prompt(state.conversation_history)
+    summary_section = state.conversation_summary or "(no summary yet)"
+    prev_ai_section = (
+        "\n".join(f"- {r}" for r in state.previous_ai_responses)
+        if state.previous_ai_responses
+        else "(none)"
+    )
+    ticket_section = "(no open ticket)"
+    if state.ticket_context:
+        ticket_section = (
+            f"Ticket {state.ticket_context.get('ticket_id')}: "
+            f"status={state.ticket_context.get('status')}, "
+            f"priority={state.ticket_context.get('priority')}"
+        )
 
     return f"""SYSTEM:
 You are a helpful customer support agent for the company.
@@ -53,7 +66,16 @@ COMPANY KNOWLEDGE:
 CUSTOMER:
 {customer_section}
 
-CONVERSATION:
+CONVERSATION SUMMARY:
+{summary_section}
+
+PREVIOUS AI RESPONSES:
+{prev_ai_section}
+
+TICKET CONTEXT:
+{ticket_section}
+
+CONVERSATION (recent):
 {history_section}
 
 CURRENT MESSAGE:

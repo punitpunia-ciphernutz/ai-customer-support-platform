@@ -95,6 +95,42 @@ export function InboxPage() {
     return aiMsgs.length ? aiMsgs[aiMsgs.length - 1].metadata : null;
   }, [messages.data]);
 
+  const latestSuggestion = useMemo(() => {
+    return (messages.data ?? []).findLast(
+      (m) => m.metadata?.suggestion && m.metadata?.suggestion_status === "generated"
+    );
+  }, [messages.data]);
+
+  const takeover = useMutation({
+    mutationFn: () =>
+      api<Conversation>(`/conversations/${selectedId}/takeover`, { method: "POST" }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+
+  const returnToAi = useMutation({
+    mutationFn: () =>
+      api<Conversation>(`/conversations/${selectedId}/return-to-ai`, { method: "POST" }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+
+  const rejectSuggestion = useMutation({
+    mutationFn: (messageId: string) =>
+      api<Message>(`/conversations/${selectedId}/suggestions/${messageId}/reject`, { method: "POST" }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["messages", selectedId] }),
+  });
+
+  const regenerateSuggestion = useMutation({
+    mutationFn: (messageId: string) =>
+      api<Message>(`/conversations/${selectedId}/suggestions/${messageId}/regenerate`, { method: "POST" }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["messages", selectedId] }),
+  });
+
+  const acceptSuggestion = useMutation({
+    mutationFn: (messageId: string) =>
+      api<Message>(`/conversations/${selectedId}/suggestions/${messageId}/accept`, { method: "POST" }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["messages", selectedId] }),
+  });
+
   const sendReply = useMutation({
     mutationFn: () =>
       api<Message>(`/conversations/${selectedId}/messages`, {
@@ -272,6 +308,25 @@ export function InboxPage() {
                       Reopen
                     </button>
                   )}
+                  {selected.ai_control_mode === "HUMAN_CONTROL" ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => returnToAi.mutate()}
+                      disabled={returnToAi.isPending}
+                    >
+                      Return to AI
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => takeover.mutate()}
+                      disabled={takeover.isPending}
+                    >
+                      Takeover
+                    </button>
+                  )}
                 </div>
               </header>
 
@@ -284,7 +339,9 @@ export function InboxPage() {
                       : "Failed to load messages."}
                   </Alert>
                 )}
-                {messages.data?.map((m) => (
+                {(messages.data ?? [])
+                  .filter((m) => !m.metadata?.internal)
+                  .map((m) => (
                   <div
                     key={m.id}
                     className={cn("message-bubble", m.sender_type.toLowerCase())}
@@ -318,6 +375,61 @@ export function InboxPage() {
                       <div><dt>Status</dt><dd>{latestAiMeta.ai_status ?? (latestAiMeta.grounded ? "Grounded" : "—")}</dd></div>
                     </dl>
                   )}
+                </aside>
+              )}
+
+              {latestSuggestion && (
+                <aside className="ai-panel" style={{ borderColor: "var(--accent)" }}>
+                  <h3 className="section-title" style={{ fontSize: "0.875rem" }}>AI Suggested Reply</h3>
+                  <p style={{ fontSize: "0.875rem", marginBottom: "0.5rem" }}>{latestSuggestion.content}</p>
+                  <div className="form-hint mb-2">
+                    Confidence: {latestSuggestion.metadata?.confidence != null
+                      ? `${Math.round(latestSuggestion.metadata.confidence * 100)}%`
+                      : "—"}
+                    {latestSuggestion.metadata?.grounded === false && (
+                      <span style={{ color: "var(--warning)", marginLeft: "0.5rem" }}>
+                        · Not grounded
+                      </span>
+                    )}
+                    {latestSuggestion.metadata?.citations?.length
+                      ? ` · Source: ${latestSuggestion.metadata.citations.map((c) => c.title).join(", ")}`
+                      : null}
+                  </div>
+                  <div className="flex gap-2" style={{ flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => {
+                        setReply(latestSuggestion.content);
+                        acceptSuggestion.mutate(latestSuggestion.id);
+                      }}
+                    >
+                      Use Reply
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setReply(latestSuggestion.content)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => regenerateSuggestion.mutate(latestSuggestion.id)}
+                      disabled={regenerateSuggestion.isPending}
+                    >
+                      Regenerate
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => rejectSuggestion.mutate(latestSuggestion.id)}
+                      disabled={rejectSuggestion.isPending}
+                    >
+                      Ignore
+                    </button>
+                  </div>
                 </aside>
               )}
 
