@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useAuth } from "@/features/auth/AuthContext";
 import { LoginPage } from "@/features/auth/LoginPage";
+import { ChannelsPage } from "@/features/channels/ChannelsPage";
 import { InboxPage } from "@/features/inbox/InboxPage";
 import { CustomerDetailPage } from "@/features/customers/CustomerDetailPage";
 import { CustomersPage } from "@/features/customers/CustomersPage";
@@ -24,6 +25,11 @@ function KnowledgeAppRedirect() {
   return <Navigate to={sourceId ? `/knowledge/${sourceId}` : "/knowledge"} replace />;
 }
 
+function InboxConversationRedirect() {
+  const { conversationId } = useParams();
+  return <Navigate to={conversationId ? `/?c=${conversationId}` : "/"} replace />;
+}
+
 export function AppRouter() {
   return (
     <Routes>
@@ -36,8 +42,13 @@ export function AppRouter() {
             <AppShell>
               <Routes>
                 <Route path="/" element={<InboxPage />} />
+                <Route path="/app/inbox" element={<InboxPage />} />
+                <Route path="/app/inbox/:conversationId" element={<InboxConversationRedirect />} />
                 <Route path="/customers" element={<CustomersPage />} />
                 <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
+                <Route path="/app/customers/:customerId" element={<CustomerDetailPage />} />
+                <Route path="/channels" element={<ChannelsPage />} />
+                <Route path="/app/channels" element={<ChannelsPage />} />
                 <Route path="/knowledge" element={<KnowledgePage />} />
                 <Route path="/knowledge/:sourceId" element={<KnowledgeSourcePage />} />
                 <Route path="/app/knowledge" element={<Navigate to="/knowledge" replace />} />
@@ -46,6 +57,7 @@ export function AppRouter() {
                 <Route path="/teams" element={<TeamsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/settings/channels" element={<ChannelSettingsPage />} />
+                <Route path="/app/settings/channels" element={<ChannelSettingsPage />} />
               </Routes>
             </AppShell>
           </Protected>

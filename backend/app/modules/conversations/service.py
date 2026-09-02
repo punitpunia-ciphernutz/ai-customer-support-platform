@@ -30,7 +30,7 @@ from app.modules.auth.permissions import CONVERSATIONS_ASSIGN
 from app.modules.channels.idempotency import IdempotencyService
 from app.modules.conversations.channels import IncomingMessage, get_adapter
 from app.modules.conversations.email_threading import EmailThreadingService
-from app.modules.conversations.events import message_failed, message_received, message_sent
+from app.modules.conversations.events import message_delivered, message_failed, message_received, message_sent
 from app.modules.conversations.normalizer import normalize_subject
 from app.modules.conversations.schemas import ConversationCreate, ConversationUpdate, MessageCreate
 from app.modules.channels.schemas import EmailSendRequest
@@ -208,6 +208,36 @@ class ConversationService:
         )
         return list(result.scalars().all())
 
+    async def enrich_message(self, message: Message) -> dict[str, Any]:
+        from app.modules.attachments.service import AttachmentService
+        from app.modules.channels.schemas import AttachmentOut
+
+        attachment_service = AttachmentService(self.db)
+        grouped = await attachment_service.list_for_messages([message.id])
+        payload = {
+            "id": message.id,
+            "conversation_id": message.conversation_id,
+            "sender_type": message.sender_type,
+            "sender_id": message.sender_id,
+            "content": message.content,
+            "channel": message.channel,
+            "external_message_id": message.external_message_id,
+            "delivery_status": message.delivery_status.value if message.delivery_status else None,
+            "metadata_": message.metadata_ or {},
+            "created_at": message.created_at,
+            "updated_at": message.updated_at,
+            "attachments": [],
+        }
+        for attachment in grouped.get(message.id, []):
+            att_out = AttachmentOut.model_validate(attachment)
+            att_out.download_url = await attachment_service.get_download_url(attachment)
+            payload["attachments"].append(att_out)
+        return payload
+
+    async def list_messages_enriched(self, organization_id: str, conversation_id: str) -> list[dict[str, Any]]:
+        messages = await self.list_messages(organization_id, conversation_id)
+        return [await self.enrich_message(message) for message in messages]
+
     async def add_agent_message(
         self, user: User, conversation_id: str, body: MessageCreate
     ) -> Message:
@@ -269,6 +299,14 @@ class ConversationService:
             raise HTTPException(status_code=409, detail="Duplicate webhook without message record")
 
         normalized["organization_id"] = organization_id
+
+        from app.infrastructure.database.models import ChannelType as CT
+        from app.modules.channels.service import ChannelService
+
+        channel_cfg = await ChannelService(self.db).get_channel(organization_id, CT.EMAIL)
+        if not channel_cfg.enabled:
+            raise HTTPException(status_code=403, detail="Email channel is disabled")
+
         adapter = get_adapter(ChannelType.EMAIL)
         incoming = await adapter.normalize(normalized)
         incoming = await adapter.identify_customer(incoming, db=self.db)
@@ -344,6 +382,16 @@ class ConversationService:
         await self.db.flush()
         await self.db.refresh(msg)
 
+        attachment_items = (incoming.metadata or {}).get("attachments") or []
+        if attachment_items:
+            from app.modules.attachments.service import AttachmentService
+
+            await AttachmentService(self.db).store_inbound(
+                organization_id=incoming.organization_id,
+                message_id=msg.id,
+                items=attachment_items,
+            )
+
         if provider and incoming.external_id:
             await IdempotencyService(self.db).record(
                 incoming.organization_id,
@@ -394,6 +442,15 @@ class ConversationService:
             conversation.status = ConversationStatus.OPEN
         await self.db.flush()
 
+        attachment_ids = list(meta.pop("attachment_ids", []) or [])
+        if attachment_ids:
+            from app.modules.attachments.service import AttachmentService
+
+            attachment_service = AttachmentService(self.db)
+            for attachment_id in attachment_ids:
+                await attachment_service.link_to_message(attachment_id, msg.id)
+            meta["attachment_ids"] = attachment_ids
+
         if conversation.channel == ChannelType.EMAIL and sender_type in {SenderType.AGENT, SenderType.AI}:
             msg.delivery_status = DeliveryStatus.SENDING
             await self.db.flush()
@@ -435,6 +492,17 @@ class ConversationService:
                     external_message_id=msg.external_message_id,
                     conversation_id=conversation.id,
                     message_id=msg.id,
+                ),
+                organization_id,
+            )
+            await self._publish_channel_event(
+                message_delivered(
+                    channel=conversation.channel,
+                    provider=None,
+                    external_message_id=msg.external_message_id,
+                    conversation_id=conversation.id,
+                    message_id=msg.id,
+                    metadata={"simulated": True},
                 ),
                 organization_id,
             )

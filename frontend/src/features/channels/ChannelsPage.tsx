@@ -1,14 +1,8 @@
-import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { api, ApiError } from "@/services/api/client";
 import { Alert, LoadingState, PageHeader } from "@/components/ui";
 import type { AIMode, ChannelType } from "@/types";
-
-const MODE_LABELS: Record<AIMode, string> = {
-  DRAFT_ONLY: "Knowledge Base",
-  SUGGEST: "Suggest Reply",
-  AUTO_REPLY: "Autopilot",
-};
 
 type ChannelConfig = {
   id: string;
@@ -18,7 +12,17 @@ type ChannelConfig = {
   settings: Record<string, unknown>;
 };
 
-export function ChannelSettingsPage() {
+type AIConfig = {
+  channel_overrides: { channel: string; mode: AIMode | null }[];
+};
+
+const MODE_LABELS: Record<AIMode, string> = {
+  DRAFT_ONLY: "Knowledge Base",
+  SUGGEST: "Suggest Reply",
+  AUTO_REPLY: "Autopilot",
+};
+
+export function ChannelsPage() {
   const qc = useQueryClient();
   const channels = useQuery({
     queryKey: ["channels"],
@@ -26,10 +30,10 @@ export function ChannelSettingsPage() {
   });
   const aiConfig = useQuery({
     queryKey: ["ai-config"],
-    queryFn: () => api<{ channel_overrides: { channel: string; mode: AIMode | null }[] }>("/ai/config"),
+    queryFn: () => api<AIConfig>("/ai/config"),
   });
 
-  const patch = useMutation({
+  const patchChannel = useMutation({
     mutationFn: ({ channel, enabled }: { channel: ChannelType; enabled: boolean }) =>
       api<ChannelConfig>(`/channels/${channel}`, {
         method: "PATCH",
@@ -44,7 +48,9 @@ export function ChannelSettingsPage() {
         method: "PATCH",
         body: JSON.stringify({ channel_overrides: [{ channel, mode }] }),
       }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["ai-config"] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["ai-config"] });
+    },
   });
 
   if (channels.isLoading || aiConfig.isLoading) return <LoadingState message="Loading channels…" />;
@@ -60,12 +66,19 @@ export function ChannelSettingsPage() {
     );
   }
 
+  const modeFor = (channel: string) =>
+    aiConfig.data?.channel_overrides.find((o) => o.channel === channel)?.mode ?? null;
+
   return (
     <div className="page">
       <PageHeader
-        title="Channel settings"
-        description="Configure inbound and outbound channels."
-        action={<Link className="btn btn-secondary btn-sm" to="/settings">← Settings</Link>}
+        title="Channels"
+        description="Overview of connected support channels."
+        action={
+          <Link className="btn btn-secondary btn-sm" to="/settings/channels">
+            Channel settings →
+          </Link>
+        }
       />
 
       <div className="card">
@@ -80,10 +93,7 @@ export function ChannelSettingsPage() {
             </tr>
           </thead>
           <tbody>
-            {(channels.data ?? []).map((ch) => {
-              const mode =
-                aiConfig.data?.channel_overrides.find((o) => o.channel === ch.channel)?.mode ?? null;
-              return (
+            {(channels.data ?? []).map((ch) => (
               <tr key={ch.id}>
                 <td>{ch.channel.replace(/_/g, " ")}</td>
                 <td>{ch.enabled ? "Connected" : "Disabled"}</td>
@@ -93,35 +103,37 @@ export function ChannelSettingsPage() {
                     <span className="text-muted">Coming Soon</span>
                   ) : (
                     <select
-                      value={mode ?? ""}
+                      value={modeFor(ch.channel) ?? ""}
                       onChange={(e) =>
                         patchMode.mutate({ channel: ch.channel, mode: e.target.value as AIMode })
                       }
                       disabled={patchMode.isPending}
                     >
                       <option value="" disabled>Select mode</option>
-                      {(Object.keys(MODE_LABELS) as AIMode[]).map((m) => (
-                        <option key={m} value={m}>{MODE_LABELS[m]}</option>
+                      {(Object.keys(MODE_LABELS) as AIMode[]).map((mode) => (
+                        <option key={mode} value={mode}>
+                          {MODE_LABELS[mode]}
+                        </option>
                       ))}
                     </select>
                   )}
                 </td>
                 <td>
                   {ch.channel === "FORM" ? (
-                    <span className="text-muted">Coming Soon</span>
+                    <span className="text-muted">—</span>
                   ) : (
                     <button
                       type="button"
                       className="btn btn-secondary btn-sm"
-                      onClick={() => patch.mutate({ channel: ch.channel, enabled: !ch.enabled })}
-                      disabled={patch.isPending}
+                      onClick={() => patchChannel.mutate({ channel: ch.channel, enabled: !ch.enabled })}
+                      disabled={patchChannel.isPending}
                     >
                       {ch.enabled ? "Disable" : "Enable"}
                     </button>
                   )}
                 </td>
               </tr>
-            );})}
+            ))}
           </tbody>
         </table>
       </div>

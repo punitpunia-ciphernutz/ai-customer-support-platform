@@ -28,6 +28,21 @@ export function MessageBubble({ message }: { message: Message }) {
         </time>
       </div>
       <div>{message.content}</div>
+      {(message.attachments ?? []).length > 0 && (
+        <div className="message-attachments" style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          {message.attachments!.map((att) => (
+            <a
+              key={att.id}
+              className="btn btn-ghost btn-sm"
+              href={att.download_url ?? `#attachment-${att.id}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              📎 {att.filename}
+            </a>
+          ))}
+        </div>
+      )}
       {message.delivery_status && (
         <div className="message-ai-tag">Delivery: {message.delivery_status}</div>
       )}

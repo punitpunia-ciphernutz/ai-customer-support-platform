@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -79,3 +81,65 @@ class AttachmentService:
             select(Attachment).where(Attachment.message_id == message_id)
         )
         return list(result.scalars().all())
+
+    async def list_for_messages(self, message_ids: list[str]) -> dict[str, list[Attachment]]:
+        if not message_ids:
+            return {}
+        result = await self.db.execute(
+            select(Attachment).where(Attachment.message_id.in_(message_ids))
+        )
+        grouped: dict[str, list[Attachment]] = {}
+        for attachment in result.scalars().all():
+            if attachment.message_id:
+                grouped.setdefault(attachment.message_id, []).append(attachment)
+        return grouped
+
+    async def store_inbound(
+        self,
+        *,
+        organization_id: str,
+        message_id: str,
+        items: list[dict[str, Any]],
+    ) -> list[Attachment]:
+        stored: list[Attachment] = []
+        for item in items:
+            filename = str(item.get("filename") or item.get("name") or "attachment")
+            mime_type = str(item.get("mime_type") or item.get("content_type") or "application/octet-stream")
+            raw = item.get("data")
+            if raw is None and item.get("content_base64"):
+                raw = base64.b64decode(str(item["content_base64"]))
+            if raw is None and item.get("content"):
+                content = item["content"]
+                raw = content if isinstance(content, (bytes, bytearray)) else str(content).encode()
+            if raw is None:
+                continue
+            data = bytes(raw)
+            attachment = await self.upload(
+                organization_id=organization_id,
+                filename=filename,
+                mime_type=mime_type,
+                data=data,
+                message_id=message_id,
+            )
+            stored.append(attachment)
+        return stored
+
+    async def load_for_send(self, attachment_ids: list[str]) -> list[Attachment]:
+        if not attachment_ids:
+            return []
+        result = await self.db.execute(select(Attachment).where(Attachment.id.in_(attachment_ids)))
+        return list(result.scalars().all())
+
+    async def build_outbound_payload(self, attachment_ids: list[str]) -> list[dict[str, Any]]:
+        attachments = await self.load_for_send(attachment_ids)
+        payload: list[dict[str, Any]] = []
+        for attachment in attachments:
+            data = await self.storage.download(attachment.storage_key)
+            payload.append(
+                {
+                    "filename": attachment.filename,
+                    "mime_type": attachment.mime_type,
+                    "content_base64": base64.b64encode(data).decode("ascii"),
+                }
+            )
+        return payload

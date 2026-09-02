@@ -5,6 +5,15 @@ export type ConversationStatus = "OPEN" | "PENDING" | "WAITING_FOR_AGENT" | "CLO
 export type AIControlMode = "AI_CONTROL" | "HUMAN_CONTROL";
 export type Priority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
 export type DeliveryStatus = "QUEUED" | "SENDING" | "SENT" | "DELIVERED" | "OPENED" | "FAILED";
+export type SenderType = "CUSTOMER" | "AGENT" | "AI" | "SYSTEM";
+export type MessageAttachment = {
+  id: string;
+  message_id: string | null;
+  filename: string;
+  mime_type: string;
+  size: number;
+  download_url?: string | null;
+};
 export type TicketStatus = "OPEN" | "IN_PROGRESS" | "WAITING" | "RESOLVED" | "CLOSED";
 export type AIMode = "DRAFT_ONLY" | "SUGGEST" | "AUTO_REPLY";
 export type IntentLabel =
@@ -84,6 +93,7 @@ export type Message = {
   delivery_status?: DeliveryStatus | null;
   created_at: string;
   updated_at?: string;
+  attachments?: MessageAttachment[];
   metadata?: {
     ai_run_id?: string;
     trigger_message_id?: string;

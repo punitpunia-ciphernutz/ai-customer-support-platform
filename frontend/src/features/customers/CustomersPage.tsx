@@ -26,6 +26,7 @@ import {
   IconUsers,
 } from "@/components/ui/icons";
 import { formatDate } from "@/utils/format";
+import { Link } from "react-router-dom";
 import type { Conversation, Customer, Ticket } from "@/types";
 
 const schema = z.object({
@@ -243,7 +244,9 @@ export function CustomersPage() {
                     <div className="cell-with-avatar">
                       <Avatar name={c.name} size="sm" />
                       <div className="cell-stack">
-                        <span className="cell-primary">{c.name}</span>
+                        <Link to={`/customers/${c.id}`} className="cell-primary">
+                          {c.name}
+                        </Link>
                       </div>
                     </div>
                   </td>

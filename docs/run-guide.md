@@ -78,8 +78,16 @@ docker compose exec backend pytest -q \
   tests/test_day5_email_autopilot.py \
   tests/test_day5_email_escalation.py \
   tests/test_day5_attachments.py \
+  tests/test_day5_bot_config_patch.py \
+  tests/test_day5_attachments_inbound.py \
+  tests/test_day5_attachments_outbound.py \
+  tests/test_day5_email_suggest_accept_send.py \
+  tests/test_day5_email_knowledge_base.py \
+  tests/test_day5_webhook_enabled.py \
   tests/test_channel_adapter.py
 ```
+
+Expected: **23/23 passed**
 
 Day 4 test suite (offline, recommended):
 
@@ -103,6 +111,8 @@ Full suite (may hit Gemini quota if key set):
 docker compose exec backend pytest -q
 ```
 
+Expected: **97/101** — 4 failures are pre-existing when `GEMINI_API_KEY` is set (`test_chunk_embed`, `test_gemini_provider` ×2, `test_semantic_search`). For offline CI, leave `GEMINI_API_KEY` empty.
+
 Day 3 agent tests (with knowledge ingestion — needs embeddings):
 
 ```bash
@@ -113,10 +123,11 @@ docker compose exec backend pytest -q tests/test_day3_agent.py
 
 1. http://localhost:5173/login — **agent@example.com** / **agent123!**
 2. **Settings** — AI kill switch, thresholds, require knowledge, multilingual, evaluation runner
-3. **Inbox** — takeover, AI suggestions, email composer for EMAIL threads, channel filters
+3. **Inbox** (`/` or `/app/inbox`) — takeover, AI suggestions, email composer (To/subject/body), channel filters
 4. **Web Chat** — customer demo (no internal diagnostics)
-5. **Settings → Channel settings** — enable/disable Email channel
-6. **Customers → Customer 360** — cross-channel history
+5. **Channels** (`/channels` or `/app/channels`) — channel overview, enable/disable, AI mode per channel
+6. **Settings → Channel settings** (`/settings/channels`) — detailed email configuration
+7. **Customers** — list links to **Customer 360** at `/customers/:id`
 
 ## 5. Day 4 verification
 
@@ -216,8 +227,53 @@ Then open **Inbox → Email filter** — conversation appears with AI suggestion
 ### Flow F — Agent email reply
 
 1. Open an EMAIL conversation in Inbox
-2. Compose subject + body → **Send Email**
-3. Mock provider records outbound send (check backend logs or re-run with `EMAIL_PROVIDER=mock`)
+2. Composer shows read-only **To:** (customer email), subject, body
+3. **Send Email** → mock provider records outbound send
+
+### Flow G — Email Suggest → Accept → Send
+
+1. Ensure EMAIL channel mode is **Suggest Reply** (Channels page or `PATCH /ai/config`)
+2. Send inbound email via mock webhook (Flow E)
+3. Wait for AI suggestion in Inbox
+4. Click **Use Reply** → composer pre-filled → **Send Email**
+5. Automated coverage: `tests/test_day5_email_suggest_accept_send.py`
+
+### Flow H — PATCH channel AI mode
+
+```bash
+docker compose exec -T backend python - <<'PY'
+import httpx
+base = "http://localhost:8000/api/v1"
+token = httpx.post(f"{base}/auth/login", json={"email":"agent@example.com","password":"agent123!"}).json()["access_token"]
+h = {"Authorization": f"Bearer {token}"}
+print(httpx.patch(f"{base}/ai/config", headers=h, json={
+    "channel_overrides": [{"channel": "EMAIL", "mode": "SUGGEST_REPLY"}]
+}).json()["channel_overrides"])
+PY
+```
+
+### Flow I — Disabled channel webhook (403)
+
+1. **Channels** → disable Email
+2. POST inbound webhook (Flow E) → expect `403 Email channel is disabled`
+3. Re-enable before continuing
+
+### Flow J — Attachments
+
+**Upload (agent):**
+
+```bash
+# With TOKEN set from login
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  -F "file=@/path/to/file.pdf" \
+  http://localhost:8000/api/v1/attachments
+```
+
+**Inbound:** include `attachments` array in webhook payload (base64 content) — see `test_day5_attachments_inbound.py`.
+
+**Outbound:** pass `attachment_ids` in `POST /conversations/{id}/email` body.
+
+Attachment chips appear on messages in Inbox thread view.
 
 ## 6. Day 3 demos (still valid)
 

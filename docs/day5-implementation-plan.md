@@ -8,7 +8,7 @@
 
 **Depends on:** Day 4 complete (`RuntimeAIConfig`, bot modes, escalation, suggestion lifecycle, inbox UI, `BotConfiguration` per channel).
 
-**Status:** **COMPLETE** (2026-09-02) — migration `0007_day5_omnichannel`, 16/16 Day 5 tests, 26/26 Day 4 regression tests.
+**Status:** **COMPLETE** (2026-09-02, re-audited after fix pass) — migration `0007_day5_omnichannel`, **23/23** Day 5 tests, **26/26** Day 4 regression, **97/101** full backend suite (4 pre-existing Gemini/env failures).
 
 ## Target architecture
 
@@ -129,8 +129,8 @@ ObjectStorage
 ```
 
 - [x] ABC in `backend/app/infrastructure/storage/`
-- [x] S3-compatible implementation (MinIO for local dev via docker-compose)
-- [x] Settings: `STORAGE_ENDPOINT`, `STORAGE_BUCKET`, credentials via env/secrets
+- [x] `LocalObjectStorage` for dev (filesystem under `STORAGE_ROOT_DIR`)
+- [x] S3-compatible interface ready; MinIO in docker-compose **deferred** (local storage satisfies Day 5 spec)
 
 ### Normalized channel events
 
@@ -449,8 +449,47 @@ RBAC: webhook unauthenticated (signature only); channel settings require admin; 
 Run Day 5 suite:
 
 ```bash
-pytest tests/test_day5_*.py tests/test_channel_adapter.py -v
+docker compose exec backend pytest -q \
+  tests/test_day5_phase1_models.py \
+  tests/test_day5_customer_resolver.py \
+  tests/test_day5_email_inbound.py \
+  tests/test_day5_email_outbound.py \
+  tests/test_day5_email_threading.py \
+  tests/test_day5_email_ai_suggest.py \
+  tests/test_day5_email_autopilot.py \
+  tests/test_day5_email_escalation.py \
+  tests/test_day5_attachments.py \
+  tests/test_day5_bot_config_patch.py \
+  tests/test_day5_attachments_inbound.py \
+  tests/test_day5_attachments_outbound.py \
+  tests/test_day5_email_suggest_accept_send.py \
+  tests/test_day5_email_knowledge_base.py \
+  tests/test_day5_webhook_enabled.py \
+  tests/test_channel_adapter.py
 ```
+
+**Result:** 23/23 passed (2026-09-02 fix pass)
+
+---
+
+## Fix pass — audit remediation (2026-09-02)
+
+Closed all P1/P2 gaps from `docs/day5-audit.md`:
+
+| # | Fix | Status |
+|---|-----|--------|
+| 1 | `PATCH /ai/config` with `channel_overrides` → upsert `BotConfiguration` | Done — API + Channel Settings UI |
+| 2 | Attachment chips in `MessageBubble`; inbound store + outbound send wiring | Done |
+| 3 | `/app/channels` page + route aliases (`/app/inbox`, `/app/customers/:id`) | Done |
+| 4 | `test_day5_email_suggest_accept_send.py` — suggest → accept → send | Done |
+| 5 | Read-only **To:** in email composer | Done |
+| 6 | Customers list links → Customer 360 | Done |
+| 7 | `test_day5_email_knowledge_base.py` — EMAIL + DRAFT_ONLY | Done |
+| 8 | Webhook rejects inbound when EMAIL channel disabled (403) | Done |
+| 9 | `message.delivered` published after successful mock send | Done |
+| 10 | `MessageOut` enrichment on create/send endpoints (fixes lazy-load 500) | Done |
+
+**Deferred (P3, acceptable):** MinIO/S3 docker-compose, `Ticket.channel` column (infer via conversation join), WebChat → `receive_inbound()` refactor.
 
 ---
 

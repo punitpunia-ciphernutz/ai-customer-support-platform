@@ -132,7 +132,7 @@ class EmailAdapter(ChannelAdapter):
             or ""
         ).strip()
         meta = dict(raw.get("metadata") or {})
-        for key in ("subject", "from_email", "to_email", "in_reply_to", "references", "headers"):
+        for key in ("subject", "from_email", "to_email", "in_reply_to", "references", "headers", "attachments"):
             if raw.get(key) is not None:
                 meta[key] = raw[key]
         return IncomingMessage(

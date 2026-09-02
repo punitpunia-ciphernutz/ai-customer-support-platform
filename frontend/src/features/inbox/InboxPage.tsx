@@ -106,6 +106,9 @@ export function InboxPage() {
 
   const { awaitingAi } = useInboxAwaitingAi(messages.data, selected?.ai_control_mode);
 
+  const customerEmail = (id: string) =>
+    customers.data?.find((c) => c.id === id)?.email ?? null;
+
   const customerName = (id: string) =>
     customers.data?.find((c) => c.id === id)?.name ?? "Customer";
 
@@ -482,13 +485,23 @@ export function InboxPage() {
                 }}
               >
                 {selected.channel === "EMAIL" && (
-                  <input
-                    className="form-input"
-                    value={emailSubject}
-                    onChange={(e) => setEmailSubject(e.target.value)}
-                    placeholder={`Subject (Re: ${selected.subject ?? "Support"})`}
-                    style={{ marginBottom: "0.5rem" }}
-                  />
+                  <>
+                    <input
+                      className="form-input"
+                      value={customerEmail(selected.customer_id) ?? ""}
+                      readOnly
+                      placeholder="To"
+                      style={{ marginBottom: "0.5rem" }}
+                      aria-label="To"
+                    />
+                    <input
+                      className="form-input"
+                      value={emailSubject}
+                      onChange={(e) => setEmailSubject(e.target.value)}
+                      placeholder={`Subject (Re: ${selected.subject ?? "Support"})`}
+                      style={{ marginBottom: "0.5rem" }}
+                    />
+                  </>
                 )}
                 <input
                   className="form-input"

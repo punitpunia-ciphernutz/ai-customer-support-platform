@@ -4,6 +4,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.infrastructure.database.models import AIControlMode, ChannelType, ConversationStatus, Priority, SenderType
+from app.modules.channels.schemas import AttachmentOut
 
 
 class ConversationCreate(BaseModel):
@@ -63,6 +64,7 @@ class MessageOut(BaseModel):
     external_message_id: str | None = None
     delivery_status: str | None = None
     metadata: dict[str, Any] = Field(validation_alias="metadata_")
+    attachments: list[AttachmentOut] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

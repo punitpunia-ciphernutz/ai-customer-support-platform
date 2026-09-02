@@ -63,8 +63,9 @@ async def list_messages(
     conversation_id: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(CONVERSATIONS_READ)),
-) -> list[Message]:
-    return await ConversationService(db).list_messages(user.organization_id, conversation_id)
+) -> list[MessageOut]:
+    enriched = await ConversationService(db).list_messages_enriched(user.organization_id, conversation_id)
+    return [MessageOut.model_validate(item) for item in enriched]
 
 
 @router.post("/conversations/{conversation_id}/email", response_model=MessageOut, status_code=201)
@@ -73,8 +74,10 @@ async def send_email(
     body: EmailSendRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
-) -> Message:
-    return await ConversationService(db).send_email_reply(user, conversation_id, body)
+) -> MessageOut:
+    message = await ConversationService(db).send_email_reply(user, conversation_id, body)
+    enriched = await ConversationService(db).enrich_message(message)
+    return MessageOut.model_validate(enriched)
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=MessageOut, status_code=201)
@@ -83,8 +86,10 @@ async def create_message(
     body: MessageCreate,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
-) -> Message:
-    return await ConversationService(db).add_agent_message(user, conversation_id, body)
+) -> MessageOut:
+    message = await ConversationService(db).add_agent_message(user, conversation_id, body)
+    enriched = await ConversationService(db).enrich_message(message)
+    return MessageOut.model_validate(enriched)
 
 
 @router.post("/public/conversations", response_model=ConversationOut, status_code=201)
@@ -105,10 +110,13 @@ async def public_create_message(
     conversation_id: str,
     body: PublicMessageCreate,
     db: AsyncSession = Depends(get_db),
-) -> Message:
-    return await ConversationService(db).add_public_message(
+) -> MessageOut:
+    service = ConversationService(db)
+    message = await service.add_public_message(
         conversation_id, body.customer_id, body.content, body.metadata
     )
+    enriched = await service.enrich_message(message)
+    return MessageOut.model_validate(enriched)
 
 
 @router.get("/public/conversations/{conversation_id}/messages", response_model=list[MessageOut])
@@ -116,8 +124,10 @@ async def public_list_messages(
     conversation_id: str,
     customer_id: str = Query(...),
     db: AsyncSession = Depends(get_db),
-) -> list[Message]:
-    return await ConversationService(db).list_public_messages(conversation_id, customer_id)
+) -> list[MessageOut]:
+    service = ConversationService(db)
+    messages = await service.list_public_messages(conversation_id, customer_id)
+    return [MessageOut.model_validate(await service.enrich_message(message)) for message in messages]
 
 
 @router.post(
@@ -187,10 +197,13 @@ async def accept_suggestion(
     message_id: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
-) -> Message:
-    return await ConversationService(db).update_suggestion_status(
+) -> MessageOut:
+    service = ConversationService(db)
+    message = await service.update_suggestion_status(
         user, conversation_id, message_id, "accepted", event="suggestion.accepted"
     )
+    enriched = await service.enrich_message(message)
+    return MessageOut.model_validate(enriched)
 
 
 @router.post("/conversations/{conversation_id}/suggestions/{message_id}/reject", response_model=MessageOut)
@@ -199,10 +212,13 @@ async def reject_suggestion(
     message_id: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
-) -> Message:
-    return await ConversationService(db).update_suggestion_status(
+) -> MessageOut:
+    service = ConversationService(db)
+    message = await service.update_suggestion_status(
         user, conversation_id, message_id, "rejected", event="suggestion.rejected"
     )
+    enriched = await service.enrich_message(message)
+    return MessageOut.model_validate(enriched)
 
 
 @router.post("/conversations/{conversation_id}/suggestions/{message_id}/regenerate", response_model=MessageOut)
@@ -211,5 +227,8 @@ async def regenerate_suggestion(
     message_id: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
-) -> Message:
-    return await ConversationService(db).regenerate_suggestion(user, conversation_id, message_id)
+) -> MessageOut:
+    service = ConversationService(db)
+    message = await service.regenerate_suggestion(user, conversation_id, message_id)
+    enriched = await service.enrich_message(message)
+    return MessageOut.model_validate(enriched)

@@ -170,6 +170,16 @@ class BotConfigurationOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class BotConfigurationUpdate(BaseModel):
+    channel: str = Field(min_length=1, max_length=32)
+    mode: AIMode | None = None
+    auto_reply_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    escalation_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    min_relevance_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    require_knowledge: bool | None = None
+    multilingual_enabled: bool | None = None
+
+
 class SupportAgentState(BaseModel):
     conversation_id: str | None = None
     message_id: str | None = None
@@ -281,6 +291,7 @@ class AIConfigUpdate(BaseModel):
     allowed_intents: list[str] | None = None
     restricted_intents: list[str] | None = None
     intent_team_map: dict[str, str] | None = None
+    channel_overrides: list[BotConfigurationUpdate] | None = None
 
 
 class AIRunSummary(BaseModel):

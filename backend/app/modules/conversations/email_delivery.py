@@ -17,6 +17,7 @@ from app.infrastructure.database.models import (
 )
 from app.infrastructure.email import get_email_provider
 from app.infrastructure.email.base import SendEmailRequest
+from app.modules.attachments.service import AttachmentService
 from app.modules.conversations.channels import OutboundSendResult
 from app.modules.conversations.email_threading import EmailThreadingService
 
@@ -52,6 +53,9 @@ class EmailDeliveryService:
         provider_name = metadata.get("provider") or self.settings.email_provider
         provider = get_email_provider(provider_name)
 
+        attachment_ids = list(metadata.get("attachment_ids") or [])
+        attachments = await AttachmentService(self.db).build_outbound_payload(attachment_ids)
+
         request = SendEmailRequest(
             to_email=customer.email,
             subject=subject,
@@ -59,6 +63,7 @@ class EmailDeliveryService:
             from_email=self.settings.email_from_address,
             in_reply_to=in_reply_to,
             references=references,
+            attachments=attachments,
         )
 
         external_id = await provider.send(request)
