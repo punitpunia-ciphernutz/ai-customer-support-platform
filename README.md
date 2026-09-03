@@ -12,6 +12,7 @@ docker compose up --build
 - App: http://localhost:5173  
 - API docs: http://localhost:8000/docs  
 - Agent login: `agent@example.com` / `agent123!`
+- Full demo users (owner, admin, manager, agents, read-only): see [`docs/progress.md`](docs/progress.md)
 
 ## Stack
 

@@ -173,7 +173,7 @@ docker compose exec backend pytest -q tests/test_day3_agent.py
 
 ## 4. Log in
 
-1. http://localhost:5173/login — **agent@example.com** / **agent123!**
+1. http://localhost:5173/login — use any demo account below (password **`agent123!`**)
 2. **Settings** — AI kill switch, model selection, thresholds, require knowledge, multilingual, evaluation runner
 3. **Inbox** (`/` or `/app/inbox`) — takeover, AI suggestions, email composer (To/subject/body), channel filters
 4. **Web Chat** — customer demo (no internal diagnostics)
@@ -183,8 +183,22 @@ docker compose exec backend pytest -q tests/test_day3_agent.py
 8. **Automations** (`/automations`) — list, **New automation**, enable/disable, detail + **execution steps**
 9. **Business hours** (`/settings/business-hours`) — editable weekly schedule, timezone, **holidays**
 10. **Inbox availability** — Online / Away / Offline dropdown in header
+11. **Teams** (`/teams`) — create/edit teams, add/remove members (MANAGER+)
 
-**Demo users:** agent `agent@example.com`, manager `manager@example.com` (password `agent123!`)
+### Demo users
+
+| Role | Name | Email | Password | Teams |
+|------|------|-------|----------|-------|
+| OWNER | Ava Owner | `owner@example.com` | `agent123!` | — |
+| ADMIN | Noah Admin | `admin@example.com` | `agent123!` | — |
+| MANAGER | Maya Manager | `manager@example.com` | `agent123!` | Support |
+| AGENT | Alex Agent | `agent@example.com` | `agent123!` | Support, Billing |
+| AGENT | Priya Shah | `priya.support@example.com` | `agent123!` | Support |
+| AGENT | Jordan Lee | `jordan.billing@example.com` | `agent123!` | Billing |
+| AGENT | Sam Rivera | `sam.both@example.com` | `agent123!` | Support, Billing |
+| READ_ONLY | Riley Reader | `readonly@example.com` | `agent123!` | — |
+
+**Scenario tips:** login as Maya to manage teams; use Priya + Alex + Sam for Support round-robin; Jordan for Billing-only; Riley to confirm read-only 403s.
 
 ## 5. Day 6 verification
 

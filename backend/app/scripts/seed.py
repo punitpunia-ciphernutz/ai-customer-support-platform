@@ -1,12 +1,28 @@
-"""Seed single organization, roles, and default agent user."""
+"""Seed organization, roles, demo users, teams, and Day 6 defaults."""
 
-from sqlalchemy import create_engine, select
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from sqlalchemy import create_engine, delete, select, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.infrastructure.database.models import ChannelConfiguration, ChannelType, Organization, Role, RoleName, Team, TeamMember, User
+from app.infrastructure.database.models import (
+    ChannelConfiguration,
+    ChannelType,
+    Conversation,
+    Organization,
+    Role,
+    RoleName,
+    Team,
+    TeamMember,
+    Ticket,
+    User,
+)
 from app.modules.ai.domain.models import (
     AgentAvailability,
+    AgentStatus,
     AIEvaluation,
     AIConfig,
     AIMode,
@@ -21,6 +37,61 @@ from app.modules.ai.prompts.seed_templates import (
 )
 from app.modules.auth.permissions import ROLE_PERMISSIONS
 from app.modules.auth.security import hash_password
+from app.modules.automation.domain.models import Automation
+from app.modules.notifications.application.service import DEFAULT_EVENT_TYPES
+from app.modules.notifications.domain.models import Notification, NotificationPreference
+
+
+@dataclass(frozen=True)
+class DemoUserSpec:
+    email: str
+    full_name: str
+    role: RoleName
+    teams: tuple[str, ...] = ()
+    password: str | None = None  # defaults to SEED_AGENT_PASSWORD
+    online: bool = False
+
+
+# Canonical demo roster — reseed keeps these; junk test users are removed.
+DEMO_USERS: tuple[DemoUserSpec, ...] = (
+    DemoUserSpec("owner@example.com", "Ava Owner", RoleName.OWNER),
+    DemoUserSpec("admin@example.com", "Noah Admin", RoleName.ADMIN),
+    DemoUserSpec("manager@example.com", "Maya Manager", RoleName.MANAGER, teams=("Support",)),
+    DemoUserSpec(
+        "agent@example.com",
+        "Alex Agent",
+        RoleName.AGENT,
+        teams=("Support", "Billing"),
+        online=True,
+    ),
+    DemoUserSpec(
+        "priya.support@example.com",
+        "Priya Shah",
+        RoleName.AGENT,
+        teams=("Support",),
+        online=True,
+    ),
+    DemoUserSpec(
+        "jordan.billing@example.com",
+        "Jordan Lee",
+        RoleName.AGENT,
+        teams=("Billing",),
+        online=True,
+    ),
+    DemoUserSpec(
+        "sam.both@example.com",
+        "Sam Rivera",
+        RoleName.AGENT,
+        teams=("Support", "Billing"),
+        online=True,
+    ),
+    DemoUserSpec("readonly@example.com", "Riley Reader", RoleName.READ_ONLY),
+)
+
+DEMO_TEAMS: tuple[tuple[str, str], ...] = (
+    ("Support", "Default support team"),
+    ("Billing", "Billing support team"),
+)
 
 
 def _seed_prompts(session: Session) -> None:
@@ -49,9 +120,104 @@ def _seed_prompts(session: Session) -> None:
             )
 
 
+def _delete_users(session: Session, user_ids: list[str]) -> None:
+    if not user_ids:
+        return
+    session.execute(update(Team).where(Team.last_assigned_user_id.in_(user_ids)).values(last_assigned_user_id=None))
+    session.execute(
+        update(Conversation).where(Conversation.assigned_user_id.in_(user_ids)).values(assigned_user_id=None)
+    )
+    session.execute(update(Ticket).where(Ticket.assigned_user_id.in_(user_ids)).values(assigned_user_id=None))
+    session.execute(update(Automation).where(Automation.created_by.in_(user_ids)).values(created_by=None))
+    session.execute(delete(TeamMember).where(TeamMember.user_id.in_(user_ids)))
+    session.execute(delete(AgentAvailability).where(AgentAvailability.user_id.in_(user_ids)))
+    session.execute(delete(NotificationPreference).where(NotificationPreference.user_id.in_(user_ids)))
+    session.execute(delete(Notification).where(Notification.user_id.in_(user_ids)))
+    session.execute(delete(User).where(User.id.in_(user_ids)))
+    session.flush()
+
+
+def _cleanup_junk_users(session: Session, org_id: str, keep_emails: set[str]) -> int:
+    """Remove users not in the demo roster (e.g. readonly-<uuid>@example.com from pytest)."""
+    junk = list(
+        session.scalars(
+            select(User).where(
+                User.organization_id == org_id,
+                User.email.notin_(keep_emails),
+            )
+        ).all()
+    )
+    to_delete = [u.id for u in junk]
+    _delete_users(session, to_delete)
+    return len(to_delete)
+
+
+def _ensure_team(session: Session, org_id: str, name: str, description: str) -> Team:
+    team = session.scalar(select(Team).where(Team.organization_id == org_id, Team.name == name))
+    if team is None:
+        team = Team(organization_id=org_id, name=name, description=description)
+        session.add(team)
+        session.flush()
+    else:
+        team.description = description
+    return team
+
+
+def _ensure_membership(session: Session, team_id: str, user_id: str) -> None:
+    existing = session.scalar(
+        select(TeamMember).where(TeamMember.team_id == team_id, TeamMember.user_id == user_id)
+    )
+    if existing is None:
+        session.add(TeamMember(team_id=team_id, user_id=user_id))
+
+
+def _ensure_availability(session: Session, org_id: str, user_id: str, *, online: bool) -> None:
+    availability = session.scalar(select(AgentAvailability).where(AgentAvailability.user_id == user_id))
+    status = AgentStatus.ONLINE if online else AgentStatus.OFFLINE
+    if availability is None:
+        session.add(
+            AgentAvailability(
+                user_id=user_id,
+                organization_id=org_id,
+                is_online=online,
+                status=status,
+                timezone="UTC",
+                schedule=DEFAULT_BUSINESS_HOURS["schedule"],
+            )
+        )
+    else:
+        availability.is_online = online
+        availability.status = status
+
+
+def _ensure_notification_prefs(session: Session, user_id: str) -> None:
+    for event_type in DEFAULT_EVENT_TYPES:
+        existing = session.scalar(
+            select(NotificationPreference).where(
+                NotificationPreference.user_id == user_id,
+                NotificationPreference.event_type == event_type,
+            )
+        )
+        if existing is None:
+            session.add(
+                NotificationPreference(
+                    user_id=user_id,
+                    event_type=event_type,
+                    in_app=True,
+                    email=False,
+                    enabled=True,
+                )
+            )
+
+
 def seed() -> None:
     settings = get_settings()
     engine = create_engine(settings.database_url_sync)
+    default_password = settings.seed_agent_password
+    keep_emails = {u.email.lower() for u in DEMO_USERS}
+    # Always keep configured seed agent email (may match agent@example.com).
+    keep_emails.add(settings.seed_agent_email.lower())
+
     with Session(engine) as session:
         org = session.scalar(select(Organization).limit(1))
         if org is None:
@@ -75,54 +241,46 @@ def seed() -> None:
                 role.permissions = perms
             roles_by_name[role_name] = role
 
-        agent = session.scalar(select(User).where(User.email == settings.seed_agent_email.lower()))
-        if agent is None:
-            agent = User(
-                organization_id=org.id,
-                role_id=roles_by_name[RoleName.AGENT].id,
-                email=settings.seed_agent_email.lower(),
-                full_name="Demo Agent",
-                hashed_password=hash_password(settings.seed_agent_password),
-                is_active=True,
-            )
-            session.add(agent)
-            session.flush()
+        removed = _cleanup_junk_users(session, org.id, keep_emails)
 
-        manager = session.scalar(select(User).where(User.email == "manager@example.com"))
-        if manager is None:
-            manager = User(
-                organization_id=org.id,
-                role_id=roles_by_name[RoleName.MANAGER].id,
-                email="manager@example.com",
-                full_name="Demo Manager",
-                hashed_password=hash_password(settings.seed_agent_password),
-                is_active=True,
-            )
-            session.add(manager)
-            session.flush()
-        else:
-            manager.role_id = roles_by_name[RoleName.MANAGER].id
+        teams_by_name = {
+            name: _ensure_team(session, org.id, name, description) for name, description in DEMO_TEAMS
+        }
 
-        team = session.scalar(select(Team).where(Team.organization_id == org.id, Team.name == "Support"))
-        if team is None:
-            team = Team(organization_id=org.id, name="Support", description="Default support team")
-            session.add(team)
-            session.flush()
-            session.add(TeamMember(team_id=team.id, user_id=agent.id))
+        users_by_email: dict[str, User] = {}
+        for spec in DEMO_USERS:
+            email = spec.email.lower()
+            # Prefer configured seed agent email for the primary agent slot.
+            if spec.email == "agent@example.com":
+                email = settings.seed_agent_email.lower()
+            password = spec.password or default_password
+            user = session.scalar(select(User).where(User.email == email))
+            if user is None:
+                user = User(
+                    organization_id=org.id,
+                    role_id=roles_by_name[spec.role].id,
+                    email=email,
+                    full_name=spec.full_name,
+                    hashed_password=hash_password(password),
+                    is_active=True,
+                )
+                session.add(user)
+                session.flush()
+            else:
+                user.full_name = spec.full_name
+                user.role_id = roles_by_name[spec.role].id
+                user.hashed_password = hash_password(password)
+                user.is_active = True
+            users_by_email[email] = user
 
-        billing_team = session.scalar(
-            select(Team).where(Team.organization_id == org.id, Team.name == "Billing")
-        )
-        if billing_team is None:
-            billing_team = Team(organization_id=org.id, name="Billing", description="Billing support team")
-            session.add(billing_team)
-            session.flush()
+            # Reset memberships for this user to the demo roster only.
+            session.execute(delete(TeamMember).where(TeamMember.user_id == user.id))
+            for team_name in spec.teams:
+                _ensure_membership(session, teams_by_name[team_name].id, user.id)
 
-        billing_member = session.scalar(
-            select(TeamMember).where(TeamMember.team_id == billing_team.id, TeamMember.user_id == agent.id)
-        )
-        if billing_member is None:
-            session.add(TeamMember(team_id=billing_team.id, user_id=agent.id))
+            if spec.role == RoleName.AGENT:
+                _ensure_availability(session, org.id, user.id, online=spec.online)
+            _ensure_notification_prefs(session, user.id)
 
         ai_config = session.scalar(select(AIConfig).where(AIConfig.organization_id == org.id))
         if ai_config is None:
@@ -170,25 +328,6 @@ def seed() -> None:
                     )
                 )
 
-        availability = session.scalar(select(AgentAvailability).where(AgentAvailability.user_id == agent.id))
-        if availability is None:
-            from app.modules.ai.domain.models import AgentStatus
-
-            session.add(
-                AgentAvailability(
-                    user_id=agent.id,
-                    organization_id=org.id,
-                    is_online=True,
-                    status=AgentStatus.ONLINE,
-                    timezone="UTC",
-                    schedule=DEFAULT_BUSINESS_HOURS["schedule"],
-                )
-            )
-        else:
-            from app.modules.ai.domain.models import AgentStatus
-
-            availability.status = AgentStatus.ONLINE if availability.is_online else AgentStatus.OFFLINE
-
         _seed_prompts(session)
 
         evaluation = session.scalar(
@@ -231,30 +370,12 @@ def seed() -> None:
                     )
                 )
 
-        from app.modules.notifications.domain.models import NotificationPreference
-        from app.modules.notifications.application.service import DEFAULT_EVENT_TYPES
-
-        for user_id in {agent.id, manager.id if manager else None} - {None}:
-            for event_type in DEFAULT_EVENT_TYPES:
-                existing = session.scalar(
-                    select(NotificationPreference).where(
-                        NotificationPreference.user_id == user_id,
-                        NotificationPreference.event_type == event_type,
-                    )
-                )
-                if existing is None:
-                    session.add(
-                        NotificationPreference(
-                            user_id=user_id,
-                            event_type=event_type,
-                            in_app=True,
-                            email=False,
-                            enabled=True,
-                        )
-                    )
-
         session.commit()
-        print(f"Seeded org={org.id} agent={settings.seed_agent_email}")
+        agent_email = settings.seed_agent_email.lower()
+        print(
+            f"Seeded org={org.id} users={len(users_by_email)} "
+            f"removed_junk={removed} primary_agent={agent_email}"
+        )
 
         from app.scripts.seed_day6 import seed_business_hours, seed_default_automations, seed_sla_policies
 

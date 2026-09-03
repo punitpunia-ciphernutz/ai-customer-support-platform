@@ -7,12 +7,12 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from app.infrastructure.database.models import AuditLog, Message, Organization, Role, RoleName, User
+from app.infrastructure.database.models import AuditLog, Message, Role, RoleName, User
 from app.infrastructure.database.session import AsyncSessionLocal
 from app.modules.ai.application.ai_service import AIService
 from app.modules.ai.infrastructure.llm.providers import EchoLLMProvider
 from app.modules.auth.permissions import ROLE_PERMISSIONS
-from app.modules.auth.security import create_access_token, hash_password
+from app.modules.auth.security import create_access_token
 from app.modules.inbox import ws as ws_module
 
 BASE = os.getenv("API_BASE", "http://localhost:8000/api/v1")
@@ -30,26 +30,18 @@ def agent_token() -> str:
 
 @pytest.mark.asyncio
 async def test_readonly_cannot_write_knowledge() -> None:
-    import uuid
-
-    email = f"readonly-{uuid.uuid4().hex[:8]}@example.com"
     async with AsyncSessionLocal() as session:
-        org_id = (await session.execute(select(Organization.id).limit(1))).scalar_one()
+        user = (
+            await session.execute(select(User).where(User.email == "readonly@example.com"))
+        ).scalar_one_or_none()
+        if user is None:
+            pytest.skip("Seeded readonly@example.com missing — run seed")
         role = (
             await session.execute(select(Role).where(Role.name == RoleName.READ_ONLY))
         ).scalar_one()
         role.permissions = list(ROLE_PERMISSIONS[RoleName.READ_ONLY])
-        user = User(
-            organization_id=org_id,
-            role_id=role.id,
-            email=email,
-            full_name="Read Only",
-            hashed_password=hash_password("readonly123!"),
-            is_active=True,
-        )
-        session.add(user)
         await session.flush()
-        token = create_access_token(user.id, extra={"org_id": org_id, "email": user.email})
+        token = create_access_token(user.id, extra={"org_id": user.organization_id, "email": user.email})
         await session.commit()
 
     try:

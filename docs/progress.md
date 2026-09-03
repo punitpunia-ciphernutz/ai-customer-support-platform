@@ -1,6 +1,6 @@
 # Progress — AI Customer Support Platform
 
-Last updated: 2026-09-03 (Teams membership management)
+Last updated: 2026-09-03 (Teams management + demo roster reseed)
 
 ## Status summary
 
@@ -83,10 +83,24 @@ docker compose exec backend pytest -q \
 
 ## Default credentials
 
-| Role | Email | Password |
-|------|-------|----------|
-| Agent | `agent@example.com` | `agent123!` |
-| Manager | `manager@example.com` | `agent123!` |
+Shared password for all demo users: **`agent123!`**
+
+| Role | Name | Email | Password | Teams | Use for |
+|------|------|-------|----------|-------|---------|
+| OWNER | Ava Owner | `owner@example.com` | `agent123!` | — | Full admin / settings |
+| ADMIN | Noah Admin | `admin@example.com` | `agent123!` | — | Org admin |
+| MANAGER | Maya Manager | `manager@example.com` | `agent123!` | Support | Teams management, escalations, NOTIFY_MANAGER |
+| AGENT | Alex Agent | `agent@example.com` | `agent123!` | Support, Billing | Primary inbox agent |
+| AGENT | Priya Shah | `priya.support@example.com` | `agent123!` | Support | Round-robin / Team inbox |
+| AGENT | Jordan Lee | `jordan.billing@example.com` | `agent123!` | Billing | Billing routing / NOTIFY_TEAM |
+| AGENT | Sam Rivera | `sam.both@example.com` | `agent123!` | Support, Billing | Multi-team membership |
+| READ_ONLY | Riley Reader | `readonly@example.com` | `agent123!` | — | RBAC 403 checks |
+
+Reseed (cleans junk test users and resets the roster):
+
+```bash
+docker compose exec backend python -m app.scripts.seed
+```
 
 ## Notes
 

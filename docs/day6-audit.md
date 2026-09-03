@@ -224,8 +224,9 @@ docker compose exec backend pytest -q \
 Day 6 automation & routing meets the Definition of Done. The engine runs end-to-end with working billing/angry/missed-chat acceptance paths, SLA timers, notifications, full test matrix, and UI for automations and business hours.
 
 **Seeded credentials for demo:**
-- Agent: `agent@example.com` / `agent123!`
-- Manager: `manager@example.com` / `agent123!`
+- Agent: `agent@example.com` / `agent123!` (Alex Agent — Support + Billing)
+- Manager: `manager@example.com` / `agent123!` (Maya Manager — Support)
+- Full demo roster (owner/admin/agents/readonly): see [`docs/progress.md`](progress.md) / [`docs/run-guide.md`](run-guide.md)
 
 ---
 
