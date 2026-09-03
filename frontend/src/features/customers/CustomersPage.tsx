@@ -12,6 +12,7 @@ import {
   Modal,
   PageHeader,
   StatCard,
+  TableSearchBar,
 } from "@/components/ui";
 import {
   IconBuilding,
@@ -20,13 +21,11 @@ import {
   IconMessage,
   IconPhone,
   IconPlus,
-  IconRefresh,
-  IconSearch,
   IconTicket,
   IconUsers,
 } from "@/components/ui/icons";
 import { formatDate } from "@/utils/format";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import type { Conversation, Customer, Ticket } from "@/types";
 
 const schema = z.object({
@@ -41,6 +40,7 @@ type Form = z.infer<typeof schema>;
 const PAGE_SIZE = 10;
 
 export function CustomersPage() {
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState("");
@@ -183,31 +183,15 @@ export function CustomersPage() {
       )}
 
       <div className="table-wrap">
-        <div className="table-toolbar">
-          <div className="table-search">
-            <IconSearch size={16} />
-            <input
-              className="form-input"
-              placeholder="Search customers…"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-            />
-          </div>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => {
-              setSearch("");
-              setPage(1);
-            }}
-          >
-            <IconRefresh size={14} />
-            Reset
-          </button>
-        </div>
+        <TableSearchBar
+          value={search}
+          placeholder="Search customers…"
+          onChange={(value) => {
+            setSearch(value);
+            setPage(1);
+          }}
+          onReset={() => setPage(1)}
+        />
 
         {customers.isLoading && <LoadingState message="Loading customers…" />}
         {customers.isError && (
@@ -239,14 +223,25 @@ export function CustomersPage() {
             </thead>
             <tbody>
               {paged.map((c) => (
-                <tr key={c.id}>
+                <tr
+                  key={c.id}
+                  className="table-row-clickable"
+                  onClick={() => navigate(`/customers/${c.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      navigate(`/customers/${c.id}`);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="link"
+                  aria-label={`Open customer ${c.name}`}
+                >
                   <td>
                     <div className="cell-with-avatar">
                       <Avatar name={c.name} size="sm" />
                       <div className="cell-stack">
-                        <Link to={`/customers/${c.id}`} className="cell-primary">
-                          {c.name}
-                        </Link>
+                        <span className="cell-primary">{c.name}</span>
                       </div>
                     </div>
                   </td>
@@ -281,7 +276,10 @@ export function CustomersPage() {
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm"
-                      onClick={() => copyId(c.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyId(c.id);
+                      }}
                       title="Copy customer ID for Web Chat"
                     >
                       <IconCopy size={14} />

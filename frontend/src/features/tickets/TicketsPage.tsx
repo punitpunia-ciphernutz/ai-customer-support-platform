@@ -22,6 +22,7 @@ import {
   Modal,
   PageHeader,
   StatCard,
+  TableSearchBar,
 } from "@/components/ui";
 import { IconPlus, IconTicket } from "@/components/ui/icons";
 import { cn } from "@/utils/cn";
@@ -34,6 +35,7 @@ export function TicketsPage() {
   const deepLinkId = searchParams.get("t");
   const [selectedId, setSelectedId] = useState<string | null>(deepLinkId);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({
     conversation_id: "",
@@ -78,11 +80,31 @@ export function TicketsPage() {
     },
   });
 
+  const customerName = (convId: string) => {
+    const conv = conversations.data?.find((c) => c.id === convId);
+    if (!conv) return "Unknown";
+    return customers.data?.find((c) => c.id === conv.customer_id)?.name ?? "Customer";
+  };
+
   const filtered = useMemo(() => {
-    const list = tickets.data ?? [];
-    if (statusFilter === "all") return list;
-    return list.filter((t) => t.status === statusFilter);
-  }, [tickets.data, statusFilter]);
+    let list = tickets.data ?? [];
+    if (statusFilter !== "all") {
+      list = list.filter((t) => t.status === statusFilter);
+    }
+    const q = search.toLowerCase().trim();
+    if (q) {
+      list = list.filter((t) => {
+        const name = customerName(t.conversation_id).toLowerCase();
+        return (
+          name.includes(q) ||
+          t.status.toLowerCase().replace(/_/g, " ").includes(q) ||
+          t.priority.toLowerCase().includes(q) ||
+          t.id.toLowerCase().includes(q)
+        );
+      });
+    }
+    return list;
+  }, [tickets.data, statusFilter, search, conversations.data, customers.data]); // eslint-disable-line react-hooks/exhaustive-deps -- customerName uses conv/customer maps
 
   useEffect(() => {
     if (!deepLinkId) return;
@@ -100,12 +122,6 @@ export function TicketsPage() {
   const openCount = (tickets.data ?? []).filter((t) => t.status === "OPEN").length;
   const inProgressCount = (tickets.data ?? []).filter((t) => t.status === "IN_PROGRESS").length;
   const resolvedCount = (tickets.data ?? []).filter((t) => t.status === "RESOLVED").length;
-
-  const customerName = (convId: string) => {
-    const conv = conversations.data?.find((c) => c.id === convId);
-    if (!conv) return "Unknown";
-    return customers.data?.find((c) => c.id === conv.customer_id)?.name ?? "Customer";
-  };
 
   const userName = (id: string | null) =>
     id ? (users.data?.find((u) => u.id === id)?.full_name ?? "Unknown") : "Unassigned";
@@ -202,6 +218,11 @@ export function TicketsPage() {
 
       <div className="split-layout" style={{ borderTop: "1px solid var(--border)" }}>
         <section className="split-list">
+          <TableSearchBar
+            value={search}
+            placeholder="Search tickets…"
+            onChange={setSearch}
+          />
           {tickets.isLoading && <LoadingState message="Loading tickets…" />}
           {tickets.isError && (
             <div style={{ padding: "1rem" }}>
@@ -211,7 +232,13 @@ export function TicketsPage() {
             </div>
           )}
           {!tickets.isLoading && !filtered.length && (
-            <EmptyState message="No tickets yet. AI escalations create tickets automatically, or create one manually." />
+            <EmptyState
+              message={
+                search.trim()
+                  ? "No tickets match your search."
+                  : "No tickets yet. AI escalations create tickets automatically, or create one manually."
+              }
+            />
           )}
           {filtered.map((t) => (
             <button

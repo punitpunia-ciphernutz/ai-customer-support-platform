@@ -9,6 +9,7 @@ import {
   Modal,
   PageHeader,
   StatCard,
+  TableSearchBar,
 } from "@/components/ui";
 import { IconBook, IconChevronLeft, IconPlus, IconRefresh, IconTrash } from "@/components/ui/icons";
 import { formatDate, statusClass } from "@/utils/format";
@@ -43,6 +44,7 @@ export function KnowledgePage() {
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<"TEXT" | "PDF" | "URL">("TEXT");
+  const [search, setSearch] = useState("");
 
   const sources = useQuery({
     queryKey: ["knowledge-sources"],
@@ -73,6 +75,20 @@ export function KnowledgePage() {
 
   const completed = (sources.data ?? []).filter((s) => s.status === "COMPLETED").length;
 
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    let list = sources.data ?? [];
+    if (q) {
+      list = list.filter(
+        (s) =>
+          s.name.toLowerCase().includes(q) ||
+          s.type.toLowerCase().includes(q) ||
+          s.status.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [sources.data, search]);
+
   return (
     <div className="page-scroll">
       <PageHeader
@@ -98,52 +114,64 @@ export function KnowledgePage() {
         </Alert>
       )}
 
-      {!sources.isLoading && !sources.data?.length && (
+      {!sources.isLoading && !(sources.data?.length) && (
         <EmptyState message="No knowledge sources yet. Add one to start ingesting documents." />
       )}
 
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Created</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {(sources.data ?? []).map((s) => (
-              <tr key={s.id}>
-                <td className="cell-primary">{s.name}</td>
-                <td><span className="badge badge-normal">{s.type}</span></td>
-                <td><span className={statusClass(s.status.toLowerCase())}>{s.status}</span></td>
-                <td className="text-sm text-muted">{formatDate(s.created_at)}</td>
-                <td>
-                  <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-                    {isRetryableStatus(s.status) && (
-                      <button
-                        type="button"
-                        className="btn btn-secondary btn-sm btn-icon"
-                        disabled={retrySource.isPending}
-                        onClick={() => retrySource.mutate(s.id)}
-                        aria-label="Retry ingestion"
-                        title="Re-queue ingestion (requires Celery worker)"
-                      >
-                        <IconRefresh size={14} />
-                      </button>
-                    )}
-                    <Link to={`/knowledge/${s.id}`} className="btn btn-secondary btn-sm">
-                      Manage →
-                    </Link>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {!sources.isLoading && (sources.data?.length ?? 0) > 0 && (
+        <div className="table-wrap">
+          <TableSearchBar
+            value={search}
+            placeholder="Search knowledge…"
+            onChange={setSearch}
+          />
+
+          {!filtered.length ? (
+            <EmptyState message="No sources match your search." />
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((s) => (
+                  <tr key={s.id}>
+                    <td className="cell-primary">{s.name}</td>
+                    <td><span className="badge badge-normal">{s.type}</span></td>
+                    <td><span className={statusClass(s.status.toLowerCase())}>{s.status}</span></td>
+                    <td className="text-sm text-muted">{formatDate(s.created_at)}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                        {isRetryableStatus(s.status) && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm btn-icon"
+                            disabled={retrySource.isPending}
+                            onClick={() => retrySource.mutate(s.id)}
+                            aria-label="Retry ingestion"
+                            title="Re-queue ingestion (requires Celery worker)"
+                          >
+                            <IconRefresh size={14} />
+                          </button>
+                        )}
+                        <Link to={`/knowledge/${s.id}`} className="btn btn-secondary btn-sm">
+                          Manage →
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
 
       {showCreate && (
         <Modal

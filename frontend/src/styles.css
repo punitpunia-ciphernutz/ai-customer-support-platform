@@ -1244,6 +1244,10 @@ a:hover {
   flex-wrap: wrap;
 }
 
+.table-row-clickable {
+  cursor: pointer;
+}
+
 .table-row-clickable:hover {
   background: rgba(255, 255, 255, 0.02);
 }

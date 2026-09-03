@@ -1,6 +1,8 @@
 import { ReactNode } from "react";
 import { cn } from "@/utils/cn";
 
+export { TableSearchBar } from "./TableSearchBar";
+
 const AVATAR_COLORS = [
   "#10b981", "#3b82f6", "#a855f7", "#f59e0b", "#ef4444",
   "#06b6d4", "#ec4899", "#8b5cf6", "#14b8a6", "#f97316",
