@@ -274,27 +274,6 @@ export function SettingsPage() {
             {config.mode_display && (
               <p className="form-hint">Display mode: {config.mode_display.replace(/_/g, " ")}</p>
             )}
-            {config.channel_overrides.length > 0 && (
-              <div className="mt-4">
-                <h3 className="section-title" style={{ fontSize: "0.875rem" }}>Per-channel overrides</h3>
-                <table className="table-wrap" style={{ fontSize: "0.8125rem" }}>
-                  <thead>
-                    <tr>
-                      <th>Channel</th>
-                      <th>Mode</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {config.channel_overrides.map((o) => (
-                      <tr key={o.channel}>
-                        <td>{o.channel.replace(/_/g, " ")}</td>
-                        <td>{o.mode?.replace(/_/g, " ") ?? "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </>
         )}
       </section>
