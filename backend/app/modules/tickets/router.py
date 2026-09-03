@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import require_permission
 from app.infrastructure.audit import write_audit
@@ -10,6 +11,7 @@ from app.infrastructure.database.models import ActorType, Conversation, Ticket, 
 from app.infrastructure.database.session import get_db
 from app.infrastructure.events import DomainEvent, event_bus
 from app.modules.auth.permissions import TICKETS_READ, TICKETS_WRITE
+from app.modules.teams.access import is_org_admin, ticket_visible_to_user, user_team_ids
 from app.modules.tickets.schemas import TicketCreate, TicketOut, TicketUpdate
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
@@ -17,14 +19,37 @@ router = APIRouter(prefix="/tickets", tags=["tickets"])
 
 @router.get("", response_model=list[TicketOut])
 async def list_tickets(
+    view: str = Query(default="all"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(TICKETS_READ)),
 ) -> list[Ticket]:
-    result = await db.execute(
-        select(Ticket)
-        .where(Ticket.organization_id == user.organization_id)
-        .order_by(Ticket.created_at.desc())
-    )
+    # Ensure role loaded for admin check
+    if user.role is None:
+        loaded = await db.scalar(select(User).where(User.id == user.id).options(selectinload(User.role)))
+        if loaded:
+            user = loaded
+
+    if view == "all" and not is_org_admin(user):
+        raise HTTPException(status_code=403, detail="Only owners and admins can list all tickets")
+
+    stmt = select(Ticket).where(Ticket.organization_id == user.organization_id)
+    if view == "mine":
+        stmt = stmt.where(Ticket.assigned_user_id == user.id)
+    elif view == "team":
+        team_ids = await user_team_ids(db, user.id)
+        stmt = stmt.where(
+            or_(
+                Ticket.assigned_team_id.in_(team_ids or ["__none__"]),
+                Ticket.assigned_user_id == user.id,
+            )
+        )
+    elif view == "unassigned":
+        stmt = stmt.where(Ticket.assigned_team_id.is_(None))
+    elif view != "all":
+        raise HTTPException(status_code=400, detail="Invalid view")
+
+    stmt = stmt.order_by(Ticket.created_at.desc())
+    result = await db.execute(stmt)
     return list(result.scalars().all())
 
 
@@ -80,7 +105,7 @@ async def get_ticket(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(TICKETS_READ)),
 ) -> Ticket:
-    return await _get_ticket(db, user.organization_id, ticket_id)
+    return await _get_ticket(db, user, ticket_id)
 
 
 @router.patch("/{ticket_id}", response_model=TicketOut)
@@ -90,7 +115,7 @@ async def update_ticket(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(TICKETS_WRITE)),
 ) -> Ticket:
-    ticket = await _get_ticket(db, user.organization_id, ticket_id)
+    ticket = await _get_ticket(db, user, ticket_id)
     old = {
         "status": ticket.status.value,
         "assigned_user_id": ticket.assigned_user_id,
@@ -155,11 +180,18 @@ async def update_ticket(
     return ticket
 
 
-async def _get_ticket(db: AsyncSession, org_id: str, ticket_id: str) -> Ticket:
+async def _get_ticket(db: AsyncSession, user: User, ticket_id: str) -> Ticket:
+    if user.role is None:
+        loaded = await db.scalar(select(User).where(User.id == user.id).options(selectinload(User.role)))
+        if loaded:
+            user = loaded
     result = await db.execute(
-        select(Ticket).where(Ticket.id == ticket_id, Ticket.organization_id == org_id)
+        select(Ticket).where(Ticket.id == ticket_id, Ticket.organization_id == user.organization_id)
     )
     ticket = result.scalar_one_or_none()
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket not found")
+    team_ids = await user_team_ids(db, user.id)
+    if not ticket_visible_to_user(ticket, user, team_ids):
+        raise HTTPException(status_code=403, detail="Ticket is outside your team scope")
     return ticket

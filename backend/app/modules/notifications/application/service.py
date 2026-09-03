@@ -68,6 +68,7 @@ class NotificationService:
                     "user_id": user_id,
                     "event_type": event_type,
                     "title": title,
+                    "body": body,
                 },
             )
         )

@@ -160,6 +160,20 @@ export type Ticket = {
   closed_at: string | null;
 };
 
+export type AppNotification = {
+  id: string;
+  event_type: string;
+  title: string;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+  metadata?: {
+    conversation_id?: string;
+    ticket_id?: string;
+    [key: string]: unknown;
+  };
+};
+
 export type AIConfig = {
   enabled: boolean;
   mode: AIMode;

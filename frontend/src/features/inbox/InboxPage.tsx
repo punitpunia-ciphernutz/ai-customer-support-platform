@@ -34,7 +34,8 @@ export function InboxPage() {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const deepLinkId = searchParams.get("c");
-  const [view, setView] = useState<View>("all");
+  const isOrgAdmin = user?.role.name === "OWNER" || user?.role.name === "ADMIN";
+  const [view, setView] = useState<View>(isOrgAdmin ? "all" : "team");
   const [selectedId, setSelectedId] = useState<string | null>(deepLinkId);
   const [reply, setReply] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
@@ -224,7 +225,7 @@ export function InboxPage() {
         <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
           <AgentAvailabilityControl />
           <div className="filter-pills">
-          {(["all", "mine", "unassigned", "web_chat", "email"] as View[]).map((v) => (
+          {(["team", "mine", "unassigned", "web_chat", "email", ...(isOrgAdmin ? (["all"] as View[]) : [])] as View[]).map((v) => (
             <button
               key={v}
               type="button"

@@ -1,6 +1,6 @@
 # Progress — AI Customer Support Platform
 
-Last updated: 2026-09-03 (User admin RBAC)
+Last updated: 2026-09-03 (Notifications UI + team-scoped tickets)
 
 ## Status summary
 
@@ -8,9 +8,23 @@ Last updated: 2026-09-03 (User admin RBAC)
 **Day 5:** **Complete** — Email channel, omnichannel foundation, unified inbox.  
 **Day 6:** **Complete** — Automation engine, routing, business hours, SLA, notifications, missed chat; audit fixes applied.  
 **Teams management:** **Complete** — membership CRUD API + Teams page (assign/remove, edit/delete, membership visibility).  
-**User admin RBAC:** **Complete** — create users, change roles, activate/deactivate, reset password (hierarchy-guarded).
+**User admin RBAC:** **Complete** — create users, change roles, activate/deactivate, reset password (hierarchy-guarded).  
+**Notifications UI + team tickets:** **Complete** — AppShell bell; tickets/inbox scoped by team membership.
 
 LLM: **Google Gemini** when `GEMINI_API_KEY` is set; otherwise **Echo/heuristic** + offline lexical embeddings.
+
+---
+
+## Notifications UI + team-scoped tickets (2026-09-03)
+
+| Area | Work |
+|------|------|
+| Notify UI | AppShell bell — list, mark read / read-all, WS refresh, deep-link to inbox/ticket |
+| API | `POST /notifications/read-all`; notification `metadata` in list payload |
+| Tickets | `GET /tickets?view=mine\|team\|all\|unassigned` + hard ACL; All = OWNER/ADMIN only |
+| Inbox | Team filter pill; agents/managers default to Team view |
+| Escalation | Sets `conversation.assigned_team_id` with ticket team |
+| Tests | `tests/test_notify_and_ticket_scope.py` |
 
 ---
 

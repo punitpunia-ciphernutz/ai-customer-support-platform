@@ -167,7 +167,7 @@ Each business area lives under `app/modules/<name>/`.
 
 | File | Role |
 |------|------|
-| `router.py` | Ticket CRUD + resolve/close timestamps + audit |
+| `router.py` | Ticket CRUD + `view=mine\|team\|all\|unassigned` + team ACL |
 | `schemas.py` | Ticket DTOs |
 
 #### Teams — `modules/teams/`
@@ -177,6 +177,7 @@ Each business area lives under `app/modules/<name>/`.
 | `router.py` | Team CRUD + membership |
 | `schemas.py` | Team / member DTOs |
 | `service.py` | Membership, unique name, delete guards |
+| `access.py` | Shared team membership + ticket visibility helpers |
 
 #### Users — `modules/users/`
 
@@ -185,6 +186,13 @@ Each business area lives under `app/modules/<name>/`.
 | `router.py` | `GET/POST/PATCH /users`, `GET /roles`, password reset |
 | `schemas.py` | User list (role + teams), create/update DTOs |
 | `service.py` | Hierarchy guards, audit (`user.created`, `user.role_changed`) |
+
+#### Notifications — `modules/notifications/`
+
+| File | Role |
+|------|------|
+| `api/routes.py` | List, mark read, **read-all**, preferences |
+| `application/service.py` | `notify` / `notify_team` / `notify_managers` |
 
 #### Inbox realtime — `modules/inbox/`
 
@@ -344,7 +352,7 @@ Defined in `src/app/router.tsx`:
 | `/customers` | `features/customers/CustomersPage.tsx` | Yes |
 | `/knowledge` | `features/knowledge/KnowledgePage.tsx` | Yes |
 | `/knowledge/:sourceId` | same file (`KnowledgeSourcePage`) | Yes |
-| `/tickets` | `features/tickets/TicketsPage.tsx` | Yes (placeholder) |
+| `/tickets` | `features/tickets/TicketsPage.tsx` | Yes |
 | `/teams` | `features/teams/TeamsPage.tsx` | Yes |
 | `/settings` | `features/settings/SettingsPage.tsx` | Yes (placeholder) |
 
@@ -355,7 +363,8 @@ Nav links live in `components/shared/AppShell.tsx`.
 | Folder | Responsibility | Talks to |
 |--------|----------------|----------|
 | `features/auth/` | Login form; `AuthContext` holds user + token | `/auth/login`, `/auth/me`, `/auth/logout` |
-| `features/inbox/` | Agent inbox: filters, thread, reply, assign, status | `/conversations`, `/messages`, `/users`, `/teams` + WS |
+| `features/inbox/` | Agent inbox: Team/Mine filters, thread, reply, assign | `/conversations`, `/messages`, `/users`, `/teams` + WS |
+| `features/notifications/` | AppShell notification bell | `/notifications` + WS |
 | `features/customers/` | Create/list customers | `/customers` |
 | `features/conversations/` | Customer-facing web chat | `/public/conversations...` + `/ws/public` |
 | `features/knowledge/` | Sources list, add TEXT/PDF/URL, status, delete | `/knowledge/...` |

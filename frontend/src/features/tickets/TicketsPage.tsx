@@ -14,6 +14,7 @@ import type {
 } from "@/types";
 import { PRIORITIES, TICKET_STATUSES } from "@/types";
 import { useSupportSocket } from "@/hooks/useSupportSocket";
+import { useAuth } from "@/features/auth/AuthContext";
 import {
   Alert,
   Avatar,
@@ -28,9 +29,14 @@ import { IconPlus, IconTicket } from "@/components/ui/icons";
 import { cn } from "@/utils/cn";
 
 type StatusFilter = "all" | TicketStatus;
+type TicketView = "team" | "mine" | "unassigned" | "all";
 
 export function TicketsPage() {
+  const { user } = useAuth();
   const qc = useQueryClient();
+  const isOrgAdmin = user?.role.name === "OWNER" || user?.role.name === "ADMIN";
+  const defaultView: TicketView = isOrgAdmin ? "all" : "team";
+  const [ticketView, setTicketView] = useState<TicketView>(defaultView);
   const [searchParams, setSearchParams] = useSearchParams();
   const deepLinkId = searchParams.get("t");
   const [selectedId, setSelectedId] = useState<string | null>(deepLinkId);
@@ -47,8 +53,8 @@ export function TicketsPage() {
   const [saveErr, setSaveErr] = useState<string | null>(null);
 
   const tickets = useQuery({
-    queryKey: ["tickets"],
-    queryFn: () => api<Ticket[]>("/tickets"),
+    queryKey: ["tickets", ticketView],
+    queryFn: () => api<Ticket[]>(`/tickets?view=${ticketView}`),
   });
 
   const conversations = useQuery({
@@ -196,12 +202,24 @@ export function TicketsPage() {
         {saveErr && <Alert type="error">{saveErr}</Alert>}
 
         <div className="filter-pills mb-4">
+          {(["team", "mine", "unassigned", ...(isOrgAdmin ? (["all"] as TicketView[]) : [])] as TicketView[]).map((v) => (
+            <button
+              key={v}
+              type="button"
+              className={cn("filter-pill", ticketView === v && "active")}
+              onClick={() => setTicketView(v)}
+            >
+              {v === "team" ? "Team" : v === "mine" ? "Mine" : v === "unassigned" ? "Unassigned" : "All"}
+            </button>
+          ))}
+        </div>
+        <div className="filter-pills mb-4">
           <button
             type="button"
             className={cn("filter-pill", statusFilter === "all" && "active")}
             onClick={() => setStatusFilter("all")}
           >
-            All ({tickets.data?.length ?? 0})
+            Status: All ({tickets.data?.length ?? 0})
           </button>
           {TICKET_STATUSES.map((s) => (
             <button
@@ -257,6 +275,7 @@ export function TicketsPage() {
               </div>
               <div className="list-item-meta">
                 <span className={statusClass(t.priority.toLowerCase())}>{t.priority}</span>
+                <span>{teamName(t.assigned_team_id)}</span>
                 <span>{formatRelative(t.created_at)}</span>
               </div>
             </button>

@@ -219,37 +219,50 @@ async def _notify_agent(db: AsyncSession, ctx: AutomationContext, action: dict[s
     user_id = action.get("value") or action.get("config", {}).get("user_id") or ctx.assigned_user_id
     if not user_id:
         return {"skipped": True}
+    meta: dict[str, Any] = {"conversation_id": ctx.conversation_id}
+    if ctx.metadata.get("ticket_id"):
+        meta["ticket_id"] = ctx.metadata["ticket_id"]
     notification = await NotificationService(db).notify(
         user_id=str(user_id),
         organization_id=ctx.organization_id,
         event_type="AUTOMATION_NOTIFY",
         title=action.get("config", {}).get("title") or "Automation notification",
         body=action.get("config", {}).get("body") or f"Automation triggered for conversation {ctx.conversation_id}",
-        metadata={"conversation_id": ctx.conversation_id},
+        metadata=meta,
     )
     return {"notified": 1 if notification else 0}
 
 
 async def _notify_team(db: AsyncSession, ctx: AutomationContext, action: dict[str, Any]) -> dict[str, Any]:
     team_ref = action.get("value") or action.get("config", {}).get("team") or ctx.assigned_team_id or "Support"
+    meta: dict[str, Any] = {"conversation_id": ctx.conversation_id}
+    if ctx.metadata.get("ticket_id"):
+        meta["ticket_id"] = ctx.metadata["ticket_id"]
     count = await NotificationService(db).notify_team(
         team_id=str(team_ref),
         organization_id=ctx.organization_id,
         event_type="AUTOMATION_NOTIFY",
         title=action.get("config", {}).get("title") or "Automation notification",
         body=action.get("config", {}).get("body") or f"Automation triggered for conversation {ctx.conversation_id}",
-        metadata={"conversation_id": ctx.conversation_id},
+        metadata=meta,
     )
     return {"notified": count}
 
 
 async def _notify_manager(db: AsyncSession, ctx: AutomationContext, action: dict[str, Any]) -> dict[str, Any]:
+    meta: dict[str, Any] = {
+        "conversation_id": ctx.conversation_id,
+        "intent": ctx.intent,
+        "sentiment": ctx.sentiment,
+    }
+    if ctx.metadata.get("ticket_id"):
+        meta["ticket_id"] = ctx.metadata["ticket_id"]
     count = await NotificationService(db).notify_managers(
         organization_id=ctx.organization_id,
         event_type="MANAGER_ALERT",
         title=action.get("config", {}).get("title") or "Manager alert",
         body=action.get("config", {}).get("body") or f"Automation alert for conversation {ctx.conversation_id}",
-        metadata={"conversation_id": ctx.conversation_id, "intent": ctx.intent, "sentiment": ctx.sentiment},
+        metadata=meta,
     )
     return {"notified": count}
 

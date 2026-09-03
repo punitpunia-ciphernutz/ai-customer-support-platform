@@ -156,6 +156,11 @@ class EscalationService:
         await self.db.flush()
         await self.db.refresh(ticket)
 
+        # Keep inbox Team view aligned with ticket routing
+        if team_id and conv.assigned_team_id is None:
+            conv.assigned_team_id = team_id
+            await self.db.flush()
+
         internal_note = self.render_handoff_note(package)
         from app.infrastructure.database.models import Message as MessageModel
 

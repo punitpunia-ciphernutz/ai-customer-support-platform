@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { ReactNode } from "react";
 import { useAuth } from "@/features/auth/AuthContext";
+import { NotificationBell } from "@/features/notifications/NotificationBell";
 import {
   IconBook,
   IconExternal,
@@ -59,6 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="sidebar-footer">
+          <NotificationBell />
           {user && (
             <div className="sidebar-user">
               <Avatar name={user.full_name} size="sm" />

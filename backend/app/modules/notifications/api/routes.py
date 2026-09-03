@@ -1,8 +1,9 @@
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_permission
@@ -22,8 +23,9 @@ class NotificationOut(BaseModel):
     body: str
     read_at: datetime | None
     created_at: datetime
+    metadata: dict[str, Any] = Field(default_factory=dict, validation_alias="metadata_")
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class PreferenceOut(BaseModel):
@@ -35,6 +37,10 @@ class PreferenceOut(BaseModel):
 
 class PreferenceUpdate(BaseModel):
     preferences: list[PreferenceOut]
+
+
+class ReadAllOut(BaseModel):
+    marked: int
 
 
 @router.get("", response_model=list[NotificationOut])
@@ -49,6 +55,21 @@ async def list_notifications(
         .limit(100)
     )
     return list(result.scalars().all())
+
+
+@router.post("/read-all", response_model=ReadAllOut)
+async def mark_all_read(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(AI_READ)),
+):
+    now = datetime.utcnow()
+    result = await db.execute(
+        update(Notification)
+        .where(Notification.user_id == user.id, Notification.read_at.is_(None))
+        .values(read_at=now)
+    )
+    await db.commit()
+    return ReadAllOut(marked=result.rowcount or 0)
 
 
 @router.patch("/{notification_id}/read", response_model=NotificationOut)
