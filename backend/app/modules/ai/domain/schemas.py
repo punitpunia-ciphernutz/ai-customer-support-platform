@@ -253,6 +253,11 @@ class AITestResponse(BaseModel):
     decision: AgentDecision
 
 
+class LLMModelOption(BaseModel):
+    id: str
+    label: str
+
+
 class AIConfigOut(BaseModel):
     enabled: bool
     mode: AIMode
@@ -266,6 +271,8 @@ class AIConfigOut(BaseModel):
     hybrid_keyword_weight: float = 0.3
     missed_chat_timeout_minutes: int = 5
     ai_response_timeout_seconds: int = 60
+    llm_model: str = "gemini-3.1-flash-lite"
+    available_llm_models: list[LLMModelOption] = Field(default_factory=list)
     business_hours: dict[str, Any] | None = None
     allowed_intents: list[str] | None = None
     restricted_intents: list[str] | None = None
@@ -287,6 +294,7 @@ class AIConfigUpdate(BaseModel):
     hybrid_keyword_weight: float | None = Field(default=None, ge=0.0, le=1.0)
     missed_chat_timeout_minutes: int | None = Field(default=None, ge=1, le=1440)
     ai_response_timeout_seconds: int | None = Field(default=None, ge=15, le=600)
+    llm_model: str | None = Field(default=None, min_length=1, max_length=128)
     business_hours: dict[str, Any] | None = None
     allowed_intents: list[str] | None = None
     restricted_intents: list[str] | None = None

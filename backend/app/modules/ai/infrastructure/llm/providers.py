@@ -15,6 +15,31 @@ T = TypeVar("T", bound=BaseModel)
 
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 
+# Models selectable from AI Support settings (Gemini).
+AVAILABLE_LLM_MODELS: tuple[tuple[str, str], ...] = (
+    ("gemini-3.1-flash-lite", "Gemini 3.1 Flash Lite — fast, low cost"),
+    ("gemini-2.5-flash", "Gemini 2.5 Flash — balanced"),
+    ("gemini-2.5-pro", "Gemini 2.5 Pro — highest quality"),
+)
+
+AVAILABLE_LLM_MODEL_IDS: frozenset[str] = frozenset(m[0] for m in AVAILABLE_LLM_MODELS)
+
+
+def available_llm_model_options() -> list[dict[str, str]]:
+    return [{"id": model_id, "label": label} for model_id, label in AVAILABLE_LLM_MODELS]
+
+
+def normalize_llm_model(model: str | None) -> str:
+    """Return a supported model id, falling back to the env/default model."""
+    settings = get_settings()
+    candidate = (model or "").strip() or settings.llm_model or DEFAULT_GEMINI_MODEL
+    if candidate in AVAILABLE_LLM_MODEL_IDS:
+        return candidate
+    # Allow the configured env model even if not in the curated UI list.
+    if candidate == settings.llm_model:
+        return candidate
+    return DEFAULT_GEMINI_MODEL
+
 
 @dataclass
 class TokenUsage:
@@ -219,6 +244,7 @@ class GeminiLLMProvider(LLMProvider):
     """Google Gemini via the official `google-genai` SDK."""
 
     def __init__(self, api_key: str, model: str = DEFAULT_GEMINI_MODEL) -> None:
+        super().__init__()
         self.api_key = api_key
         self.model = model
 
@@ -277,8 +303,11 @@ class GeminiLLMProvider(LLMProvider):
         yield await self.generate(prompt, **kwargs)
 
 
-def get_llm_provider() -> LLMProvider:
+def get_llm_provider(model: str | None = None) -> LLMProvider:
     settings = get_settings()
     if settings.has_gemini:
-        return GeminiLLMProvider(api_key=settings.gemini_api_key, model=settings.llm_model)
+        return GeminiLLMProvider(
+            api_key=settings.gemini_api_key,
+            model=normalize_llm_model(model),
+        )
     return EchoLLMProvider()

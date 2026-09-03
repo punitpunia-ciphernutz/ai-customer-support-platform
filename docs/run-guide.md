@@ -174,7 +174,7 @@ docker compose exec backend pytest -q tests/test_day3_agent.py
 ## 4. Log in
 
 1. http://localhost:5173/login — **agent@example.com** / **agent123!**
-2. **Settings** — AI kill switch, thresholds, require knowledge, multilingual, evaluation runner
+2. **Settings** — AI kill switch, model selection, thresholds, require knowledge, multilingual, evaluation runner
 3. **Inbox** (`/` or `/app/inbox`) — takeover, AI suggestions, email composer (To/subject/body), channel filters
 4. **Web Chat** — customer demo (no internal diagnostics)
 5. **Channels** (`/channels` or `/app/channels`) — channel overview, enable/disable, AI mode per channel

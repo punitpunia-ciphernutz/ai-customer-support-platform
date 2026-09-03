@@ -140,6 +140,7 @@ def seed() -> None:
                     hybrid_keyword_weight=0.3,
                     business_hours=DEFAULT_BUSINESS_HOURS,
                     missed_chat_timeout_minutes=5,
+                    llm_model="gemini-3.1-flash-lite",
                     restricted_intents=["OTHER"],
                     intent_team_map={},
                 )

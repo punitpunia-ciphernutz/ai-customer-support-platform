@@ -238,7 +238,7 @@ ai/
 | Persist more AIRun fields | `domain/models.py` + migration |
 | Change intents / classification schema | `domain/schemas.py` |
 | Change LangGraph steps | `graphs/classification.py` |
-| Change Gemini model / prompts | `infrastructure/llm/providers.py` + `settings.llm_model` |
+| Change Gemini model / prompts | Settings → AI Support → Model (`ai_configs.llm_model`); prompts in `infrastructure/llm/providers.py` + env `LLM_MODEL` default |
 | Wire AI into chat auto-reply | **Don’t** — that’s Day 3; keep boundary via `AIService` |
 
 #### Placeholders (empty for later)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/services/api/client";
 import { formatDate, formatCost, formatPercent, statusClass } from "@/utils/format";
@@ -22,6 +22,89 @@ import {
 import { SettingsSubNav } from "@/components/shared/SettingsSubNav";
 import { cn } from "@/utils/cn";
 
+type SelectOption = { value: string; label: string };
+
+function SelectMenu({
+  id,
+  value,
+  options,
+  onChange,
+  disabled,
+}: {
+  id: string;
+  value: string;
+  options: SelectOption[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selected = options.find((o) => o.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="select-menu" ref={rootRef}>
+      <button
+        type="button"
+        id={id}
+        className="form-select select-menu-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="select-menu-value">{selected?.label ?? value}</span>
+        <span className="select-menu-chevron" aria-hidden>
+          ▾
+        </span>
+      </button>
+      {open && (
+        <ul className="select-menu-list" role="listbox" aria-labelledby={id}>
+          {options.map((opt) => (
+            <li key={opt.value}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={opt.value === value}
+                className={cn("select-menu-option", opt.value === value && "selected")}
+                onClick={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
+              >
+                {opt.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+const MODE_OPTIONS: SelectOption[] = [
+  { value: "DRAFT_ONLY", label: "Knowledge Base — send when grounded, else escalate" },
+  { value: "SUGGEST", label: "Suggest Reply — drafts for agents only" },
+  { value: "AUTO_REPLY", label: "Autopilot — auto-send when confident" },
+];
+
 type SettingsDraft = {
   enabled: boolean;
   mode: AIMode;
@@ -31,6 +114,7 @@ type SettingsDraft = {
   escalate_if_unknown: boolean;
   multilingual_enabled: boolean;
   ai_response_timeout_seconds: number;
+  llm_model: string;
   allowed_intents: string[] | null;
   restricted_intents: string[];
   intent_team_map: Record<string, string>;
@@ -50,6 +134,7 @@ function draftFromConfig(config: AIConfig): SettingsDraft {
     escalate_if_unknown: config.escalate_if_unknown ?? true,
     multilingual_enabled: config.multilingual_enabled ?? true,
     ai_response_timeout_seconds: config.ai_response_timeout_seconds ?? 60,
+    llm_model: config.llm_model ?? "gemini-3.1-flash-lite",
     allowed_intents: config.allowed_intents,
     restricted_intents: config.restricted_intents ?? [],
     intent_team_map: { ...emptyTeamMap(), ...(config.intent_team_map ?? {}) },
@@ -70,6 +155,7 @@ function payloadFromDraft(draft: SettingsDraft): Partial<AIConfig> {
     escalate_if_unknown: draft.escalate_if_unknown,
     multilingual_enabled: draft.multilingual_enabled,
     ai_response_timeout_seconds: draft.ai_response_timeout_seconds,
+    llm_model: draft.llm_model,
     allowed_intents: draft.allowed_intents,
     restricted_intents: draft.restricted_intents,
     intent_team_map,
@@ -224,29 +310,57 @@ export function SettingsPage() {
         )}
         {draft && (
           <>
-            <div className="flex items-center gap-4 mb-4" style={{ flexWrap: "wrap" }}>
-              <label className="flex items-center gap-2" style={{ cursor: "pointer", fontSize: "0.875rem" }}>
-                <input
-                  type="checkbox"
-                  checked={draft.enabled}
-                  onChange={(e) => updateDraft({ enabled: e.target.checked })}
+            <div className="flex gap-4 mb-4" style={{ flexWrap: "wrap", alignItems: "flex-start" }}>
+              <div className="form-field" style={{ margin: 0, minWidth: 180 }}>
+                <span className="form-label">Enabled</span>
+                <label
+                  className="flex items-center gap-2"
+                  htmlFor="ai-enabled"
+                  style={{
+                    cursor: "pointer",
+                    fontSize: "0.875rem",
+                    minHeight: "2.5rem",
+                    padding: "0.5625rem 0",
+                  }}
+                >
+                  <input
+                    id="ai-enabled"
+                    type="checkbox"
+                    checked={draft.enabled}
+                    onChange={(e) => updateDraft({ enabled: e.target.checked })}
+                    disabled={patchConfig.isPending}
+                  />
+                  AI Support enabled
+                </label>
+              </div>
+              <div className="form-field" style={{ margin: 0, width: 300, maxWidth: "100%" }}>
+                <label className="form-label" htmlFor="ai-mode">Mode</label>
+                <SelectMenu
+                  id="ai-mode"
+                  value={draft.mode}
+                  options={MODE_OPTIONS}
+                  onChange={(value) => updateDraft({ mode: value as AIMode })}
                   disabled={patchConfig.isPending}
                 />
-                AI Support enabled
-              </label>
-              <div className="form-field" style={{ margin: 0, minWidth: 240 }}>
-                <label className="form-label" htmlFor="ai-mode">Mode</label>
-                <select
-                  id="ai-mode"
-                  className="form-select"
-                  value={draft.mode}
-                  onChange={(e) => updateDraft({ mode: e.target.value as AIMode })}
+              </div>
+              <div className="form-field" style={{ margin: 0, width: 280, maxWidth: "100%" }}>
+                <label className="form-label" htmlFor="ai-model">Model</label>
+                <SelectMenu
+                  id="ai-model"
+                  value={draft.llm_model}
+                  options={(() => {
+                    const options = config?.available_llm_models?.length
+                      ? config.available_llm_models.map((m) => ({ value: m.id, label: m.label }))
+                      : [];
+                    if (!options.some((m) => m.value === draft.llm_model)) {
+                      options.unshift({ value: draft.llm_model, label: draft.llm_model });
+                    }
+                    return options;
+                  })()}
+                  onChange={(value) => updateDraft({ llm_model: value })}
                   disabled={patchConfig.isPending}
-                >
-                  <option value="DRAFT_ONLY">Knowledge Base — send when grounded, else escalate</option>
-                  <option value="SUGGEST">Suggest Reply — drafts for agents only</option>
-                  <option value="AUTO_REPLY">Autopilot — auto-send when confident</option>
-                </select>
+                />
+                <span className="form-hint">Gemini model used for classification and replies</span>
               </div>
             </div>
 

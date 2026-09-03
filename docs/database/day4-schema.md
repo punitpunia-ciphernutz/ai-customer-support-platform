@@ -88,6 +88,7 @@ Agent online status and schedule for routing.
 | `business_hours` | JSONB | Mon–Fri 09:00–18:00 UTC |
 | `missed_chat_timeout_minutes` | int | 5 |
 | `ai_response_timeout_seconds` | int | 60 |
+| `llm_model` | string | `gemini-3.1-flash-lite` — org-selected Gemini model for classification + replies |
 | `allowed_intents` | JSONB | `null` = AI may handle all intents |
 | `restricted_intents` | JSONB | listed intents always escalate |
 | `intent_team_map` | JSONB | `{ "GENERAL_QUESTION": "Billing" }` — used when creating **AI escalation tickets**. Unmapped / unknown team names assign to Support. Automations are independent and unchanged. |

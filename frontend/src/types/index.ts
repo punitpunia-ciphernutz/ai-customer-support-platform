@@ -140,6 +140,8 @@ export type AIConfig = {
   multilingual_enabled?: boolean;
   missed_chat_timeout_minutes?: number;
   ai_response_timeout_seconds?: number;
+  llm_model?: string;
+  available_llm_models?: { id: string; label: string }[];
   allowed_intents: string[] | null;
   restricted_intents: string[] | null;
   intent_team_map: Record<string, string> | null;

@@ -126,6 +126,7 @@ class AIConfig(Base):
     business_hours: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     missed_chat_timeout_minutes: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     ai_response_timeout_seconds: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
+    llm_model: Mapped[str] = mapped_column(String(128), default="gemini-3.1-flash-lite", nullable=False)
     allowed_intents: Mapped[list[str] | None] = mapped_column(JSONB)
     restricted_intents: Mapped[list[str] | None] = mapped_column(JSONB, default=list)
     intent_team_map: Mapped[dict[str, str] | None] = mapped_column(JSONB)

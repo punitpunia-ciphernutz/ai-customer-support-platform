@@ -5,8 +5,15 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi import HTTPException, status
+
+from app.config import get_settings
 from app.modules.ai.domain.models import AIConfig, AIMode, BotConfiguration
 from app.modules.ai.domain.schemas import AIConfigUpdate, BotConfigurationUpdate
+from app.modules.ai.infrastructure.llm.providers import (
+    AVAILABLE_LLM_MODEL_IDS,
+    normalize_llm_model,
+)
 
 
 async def get_or_create_ai_config(db: AsyncSession, organization_id: str) -> AIConfig:
@@ -26,6 +33,7 @@ async def get_or_create_ai_config(db: AsyncSession, organization_id: str) -> AIC
         multilingual_enabled=True,
         hybrid_keyword_weight=0.3,
         missed_chat_timeout_minutes=5,
+        llm_model=normalize_llm_model(get_settings().llm_model),
         restricted_intents=["OTHER"],
         intent_team_map={},
     )
@@ -62,6 +70,16 @@ async def update_ai_config(db: AsyncSession, organization_id: str, body: AIConfi
     config = await get_or_create_ai_config(db, organization_id)
     payload = body.model_dump(exclude_unset=True)
     channel_overrides = payload.pop("channel_overrides", None)
+
+    if "llm_model" in payload and payload["llm_model"] is not None:
+        requested = str(payload["llm_model"]).strip()
+        settings = get_settings()
+        if requested not in AVAILABLE_LLM_MODEL_IDS and requested != settings.llm_model:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Unsupported LLM model: {requested}",
+            )
+        payload["llm_model"] = normalize_llm_model(requested)
 
     for key, value in payload.items():
         setattr(config, key, value)

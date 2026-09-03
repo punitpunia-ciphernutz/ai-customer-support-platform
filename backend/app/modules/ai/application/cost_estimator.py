@@ -7,6 +7,9 @@ from decimal import Decimal
 # USD per 1M tokens (approximate dev pricing)
 MODEL_PRICING: dict[str, tuple[float, float]] = {
     "gemini-3.1-flash-lite": (0.10, 0.40),
+    "gemini-2.5-flash": (0.15, 0.60),
+    "gemini-2.5-pro": (1.25, 10.00),
+    "gemini-2.0-flash": (0.10, 0.40),
     "echo-heuristic": (0.0, 0.0),
     "default": (0.15, 0.60),
 }

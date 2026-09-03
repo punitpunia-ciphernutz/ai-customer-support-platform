@@ -24,15 +24,26 @@ from app.modules.ai.domain.schemas import (
 )
 from app.modules.ai.graphs.classification import timed_classification
 from app.modules.ai.graphs.support_agent import GRAPH_VERSION, timed_support_agent
-from app.modules.ai.infrastructure.llm.providers import LLMProvider, get_llm_provider
+from app.modules.ai.infrastructure.llm.providers import LLMProvider, get_llm_provider, normalize_llm_model
 from app.modules.conversations.service import ConversationService
 
 
 class AIService:
     def __init__(self, db: AsyncSession, llm: LLMProvider | None = None) -> None:
         self.db = db
+        self._injected_llm = llm
         self.llm = llm or get_llm_provider()
         self.settings = get_settings()
+
+    def _llm_for(self, llm_model: str | None) -> LLMProvider:
+        if self._injected_llm is not None:
+            return self._injected_llm
+        return get_llm_provider(model=llm_model)
+
+    def _run_model_name(self, llm_model: str | None = None) -> str:
+        if not self.settings.has_gemini:
+            return "echo-heuristic"
+        return normalize_llm_model(llm_model or self.settings.llm_model)
 
     async def classify(
         self,
@@ -48,7 +59,7 @@ class AIService:
             message_id=message_id,
             type=AIRunType.CLASSIFICATION,
             status=AIRunStatus.RUNNING,
-            model=self.settings.llm_model if self.settings.has_gemini else "echo-heuristic",
+            model=self._run_model_name(),
             input={"message": message, "context": context or {}},
         )
         self.db.add(run)
@@ -92,7 +103,9 @@ class AIService:
         if not config.enabled:
             raise ValueError("AI is disabled for this organization")
 
-        run, skip_processing = await self._acquire_agent_run(conversation_id, message_id, force=force)
+        run, skip_processing = await self._acquire_agent_run(
+            conversation_id, message_id, force=force, llm_model=config.llm_model
+        )
         if skip_processing:
             response = self._response_from_run(run)
             if response is not None:
@@ -100,12 +113,15 @@ class AIService:
             return self._empty_response(run), run
 
         run.status = AIRunStatus.RUNNING
+        run.model = self._run_model_name(config.llm_model)
         await self.db.flush()
 
         try:
             state = await ContextBuilder(self.db).build(conversation_id, message_id)
+            llm = self._llm_for(config.llm_model)
+            llm.reset_usage()
             final_state, latency_ms, token_usage = await timed_support_agent(
-                state, config=config, llm=self.llm, db_session=self.db
+                state, config=config, llm=llm, db_session=self.db
             )
             run.status = AIRunStatus.COMPLETED
             run.intent = final_state.intent.value if final_state.intent else None
@@ -176,8 +192,10 @@ class AIService:
             state = await ContextBuilder(self.db).build(conversation_id)
             state.user_message = message
 
+        llm = self._llm_for(config.llm_model)
+        llm.reset_usage()
         final_state, _latency, _tokens = await timed_support_agent(
-            state, config=config, llm=self.llm, db_session=self.db
+            state, config=config, llm=llm, db_session=self.db
         )
         return AIResponse(
             answer=final_state.final_response or final_state.draft_response or "",
@@ -406,6 +424,7 @@ class AIService:
         message_id: str,
         *,
         force: bool = False,
+        llm_model: str | None = None,
     ) -> tuple[AIRun, bool]:
         """Return an agent run and whether graph execution should be skipped."""
         existing = await self._get_existing_agent_run(message_id)
@@ -419,6 +438,7 @@ class AIService:
             existing.latency_ms = None
             existing.token_usage = None
             existing.trace = None
+            existing.model = self._run_model_name(llm_model)
             await self.db.flush()
             return existing, False
         if existing is not None:
@@ -438,6 +458,7 @@ class AIService:
                 existing.confidence = None
                 existing.latency_ms = None
                 existing.token_usage = None
+                existing.model = self._run_model_name(llm_model)
                 await self.db.flush()
                 return existing, False
 
@@ -447,7 +468,7 @@ class AIService:
             message_id=message_id,
             type=AIRunType.AGENT,
             status=AIRunStatus.PENDING,
-            model=self.settings.llm_model if self.settings.has_gemini else "echo-heuristic",
+            model=self._run_model_name(llm_model),
             graph_version=GRAPH_VERSION,
             processing_key=processing_key,
             input={"conversation_id": conversation_id, "message_id": message_id},

@@ -21,7 +21,9 @@ from app.modules.ai.domain.schemas import (
     ClassifyRequest,
     ClassifyResponse,
     EvaluationReport,
+    LLMModelOption,
 )
+from app.modules.ai.infrastructure.llm.providers import available_llm_model_options
 from app.modules.auth.permissions import AI_READ, AI_WRITE, CONVERSATIONS_READ
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -126,6 +128,7 @@ async def _config_out(db: AsyncSession, organization_id: str) -> AIConfigOut:
     out = AIConfigOut.model_validate(config)
     out.mode_display = AI_MODE_DISPLAY.get(config.mode, config.mode.value)
     out.channel_overrides = [BotConfigurationOut.model_validate(o) for o in overrides.scalars().all()]
+    out.available_llm_models = [LLMModelOption.model_validate(o) for o in available_llm_model_options()]
     return out
 
 
