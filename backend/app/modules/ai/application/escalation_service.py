@@ -180,33 +180,41 @@ class EscalationService:
         conversation = await self.conversations.get_conversation(organization_id, state.conversation_id)
         await self.conversations._publish_message(note, conversation)  # noqa: SLF001
 
-        if source == TicketSource.AI_ESCALATION and notify_customer:
-            handoff = (
-                "Thanks for your patience. I'm connecting you with a member of our support team "
-                "who can help you further."
+        if source == TicketSource.AI_ESCALATION:
+            # Always tell the customer a ticket exists (parity with timeout escalation).
+            # notify_customer=False still notifies on chat channels; on EMAIL it only
+            # suppresses outbound mail in Suggest / Knowledge Base modes.
+            notice = (
+                "A support ticket has been created and our team will follow up with you shortly."
             )
-            if (conversation.channel.value if hasattr(conversation.channel, "value") else str(conversation.channel)) == "EMAIL":
-                await self.conversations.send_ai_reply(
-                    state.conversation_id or "",
-                    handoff,
-                    {
-                        "ai_run_id": ai_run_id,
-                        "escalation": True,
-                        "internal": False,
-                    },
-                )
+            channel_val = (
+                conversation.channel.value
+                if hasattr(conversation.channel, "value")
+                else str(conversation.channel)
+            )
+            notice_meta = {
+                "ai_run_id": ai_run_id,
+                "escalation": True,
+                "ai_escalation_notice": True,
+                "ticket_id": ticket.id,
+                "internal": False,
+                "trigger_message_id": state.message_id,
+            }
+            if channel_val == "EMAIL":
+                if notify_customer:
+                    await self.conversations.send_ai_reply(
+                        state.conversation_id or "",
+                        notice,
+                        notice_meta,
+                    )
             else:
                 handoff_msg = Message(
                     conversation_id=state.conversation_id,
-                    sender_type=SenderType.AI,
+                    sender_type=SenderType.SYSTEM,
                     sender_id=None,
-                    content=handoff,
+                    content=notice,
                     channel=conversation.channel,
-                    metadata_={
-                        "ai_run_id": ai_run_id,
-                        "escalation": True,
-                        "internal": False,
-                    },
+                    metadata_=notice_meta,
                 )
                 self.db.add(handoff_msg)
                 await self.db.flush()

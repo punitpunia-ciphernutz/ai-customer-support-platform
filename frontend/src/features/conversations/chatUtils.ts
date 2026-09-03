@@ -12,7 +12,9 @@ export function findPendingCustomerMessage(messages: Message[]): Message | null 
         m.sender_type === "AGENT" ||
         m.sender_type === "AI" ||
         (m.sender_type === "SYSTEM" &&
-          (m.metadata?.offline_notice || m.metadata?.timeout_escalation))
+          (m.metadata?.offline_notice ||
+            m.metadata?.timeout_escalation ||
+            m.metadata?.ai_escalation_notice))
     );
     if (!hasResponse) return msg;
     break;

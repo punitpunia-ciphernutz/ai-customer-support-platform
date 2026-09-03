@@ -83,5 +83,6 @@ async def test_email_escalation_creates_ticket() -> None:
         ).scalars().all()
         assert len(ai_msgs) == 1
         assert ai_msgs[0].metadata_.get("escalation") is True
-        assert "support team" in ai_msgs[0].content.lower()
+        assert ai_msgs[0].metadata_.get("ticket_id") == tickets[0].id
+        assert "ticket has been created" in ai_msgs[0].content.lower()
         await session.rollback()

@@ -108,6 +108,7 @@ export type Message = {
     ticket_id?: string;
     timeout_ticket_id?: string;
     timeout_escalation?: boolean;
+    ai_escalation_notice?: boolean;
     offline_notice?: boolean;
     estimated_cost_usd?: number;
     suggestion?: boolean;

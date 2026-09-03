@@ -119,6 +119,20 @@ async def test_draft_only_escalates_unknown() -> None:
             )
         ).scalars().all()
         assert len(ai_msgs) == 0
+        notices = (
+            await session.execute(
+                select(Message).where(
+                    Message.conversation_id == conv.id,
+                    Message.sender_type == SenderType.SYSTEM,
+                )
+            )
+        ).scalars().all()
+        customer_notices = [
+            m for m in notices if (m.metadata_ or {}).get("ai_escalation_notice")
+        ]
+        assert len(customer_notices) == 1
+        assert customer_notices[0].metadata_["ticket_id"] == tickets[0].id
+        assert "ticket has been created" in customer_notices[0].content.lower()
         await session.rollback()
 
 

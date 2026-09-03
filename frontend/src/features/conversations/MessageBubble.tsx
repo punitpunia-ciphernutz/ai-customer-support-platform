@@ -54,7 +54,9 @@ export function MessageBubble({ message }: { message: Message }) {
           )}
         </div>
       )}
-      {isSystem && message.metadata?.timeout_escalation && message.metadata?.ticket_id && (
+      {isSystem &&
+        message.metadata?.ticket_id &&
+        (message.metadata?.timeout_escalation || message.metadata?.ai_escalation_notice) && (
         <div className="message-ai-tag">Ticket #{message.metadata.ticket_id.slice(0, 8)}…</div>
       )}
     </div>

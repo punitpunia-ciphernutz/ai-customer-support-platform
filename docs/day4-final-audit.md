@@ -97,7 +97,7 @@ All DoD items from `docs/day4-implementation-plan.md` are **COMPLETE** except ex
 | `runtime_config.py` | New — merges org + channel bot overrides |
 | `ai_service.py` | DRAFT_ONLY/SUGGEST/AUTO_REPLY side effects; token usage; force rerun |
 | `support_agent.py` | TraceCollector; detect_language node; SUGGEST_ONLY decision; Echo offline embeddings |
-| `escalation_service.py` | `notify_customer` flag for non-Autopilot escalations |
+| `escalation_service.py` | Always posts customer-visible ticket notice on chat channels; EMAIL outbound still gated by `notify_customer` (Autopilot) |
 | `providers.py` | TokenUsage tracking on all LLM calls |
 | `prompt_service.py` | DB template rendering for generation + grounding |
 | `celery_app.py` + `docker-compose.yml` | Beat worker + missed chat schedule |
