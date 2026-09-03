@@ -42,11 +42,17 @@ export type User = {
   created_at: string;
 };
 
+export type UserTeamBrief = {
+  id: string;
+  name: string;
+};
+
 export type UserListItem = {
   id: string;
   email: string;
   full_name: string;
   is_active: boolean;
+  teams?: UserTeamBrief[];
 };
 
 export type Team = {
@@ -55,6 +61,20 @@ export type Team = {
   name: string;
   description: string | null;
   created_at: string;
+  member_count?: number;
+};
+
+export type TeamMember = {
+  id: string;
+  user_id: string;
+  email: string;
+  full_name: string;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type TeamDetail = Team & {
+  members: TeamMember[];
 };
 
 export type Customer = {

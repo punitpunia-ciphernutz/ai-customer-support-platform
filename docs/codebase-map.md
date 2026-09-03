@@ -174,8 +174,9 @@ Each business area lives under `app/modules/<name>/`.
 
 | File | Role |
 |------|------|
-| `router.py` | `GET/POST /teams`, `GET /users` |
-| `schemas.py` | Team / user list DTOs |
+| `router.py` | Team CRUD + membership + `GET /users` (with teams) |
+| `schemas.py` | Team / member / user list DTOs |
+| `service.py` | Membership, unique name, delete guards |
 
 #### Inbox realtime — `modules/inbox/`
 
@@ -336,7 +337,7 @@ Defined in `src/app/router.tsx`:
 | `/knowledge` | `features/knowledge/KnowledgePage.tsx` | Yes |
 | `/knowledge/:sourceId` | same file (`KnowledgeSourcePage`) | Yes |
 | `/tickets` | `features/tickets/TicketsPage.tsx` | Yes (placeholder) |
-| `/teams` | `features/teams/TeamsPage.tsx` | Yes (placeholder) |
+| `/teams` | `features/teams/TeamsPage.tsx` | Yes |
 | `/settings` | `features/settings/SettingsPage.tsx` | Yes (placeholder) |
 
 Nav links live in `components/shared/AppShell.tsx`.
@@ -350,7 +351,8 @@ Nav links live in `components/shared/AppShell.tsx`.
 | `features/customers/` | Create/list customers | `/customers` |
 | `features/conversations/` | Customer-facing web chat | `/public/conversations...` + `/ws/public` |
 | `features/knowledge/` | Sources list, add TEXT/PDF/URL, status, delete | `/knowledge/...` |
-| `features/tickets|teams|settings/` | Placeholders for later UI | (APIs exist on backend) |
+| `features/tickets|settings/` | Placeholders for later UI | (APIs exist on backend) |
+| `features/teams/` | Create/edit/delete teams; add/remove members; membership badges | `/teams`, `/users` |
 
 ### 4.4 Shared frontend utilities
 

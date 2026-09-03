@@ -1,14 +1,25 @@
 # Progress — AI Customer Support Platform
 
-Last updated: 2026-09-02 (Day 6 complete — post-audit fixes)
+Last updated: 2026-09-03 (Teams membership management)
 
 ## Status summary
 
 **Day 1–4:** Complete (re-audited 2026-09-01).  
 **Day 5:** **Complete** — Email channel, omnichannel foundation, unified inbox.  
-**Day 6:** **Complete** — Automation engine, routing, business hours, SLA, notifications, missed chat; audit fixes applied.
+**Day 6:** **Complete** — Automation engine, routing, business hours, SLA, notifications, missed chat; audit fixes applied.  
+**Teams management:** **Complete** — membership CRUD API + Teams page (assign/remove, edit/delete, membership visibility).
 
 LLM: **Google Gemini** when `GEMINI_API_KEY` is set; otherwise **Echo/heuristic** + offline lexical embeddings.
+
+---
+
+## Teams management (2026-09-03)
+
+| Area | Work |
+|------|------|
+| API | `GET/PATCH/DELETE /teams/{id}`, membership add/remove, `member_count` + user `teams` enrichment |
+| UI | Teams page: member counts, detail modal (edit/add/remove/delete), Teams column on org members |
+| Tests | `tests/test_teams_api.py` |
 
 ---
 
