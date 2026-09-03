@@ -73,6 +73,14 @@ export function KnowledgePage() {
     },
   });
 
+  const deleteSource = useMutation({
+    mutationFn: (sourceId: string) =>
+      api(`/knowledge/sources/${sourceId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["knowledge-sources"] });
+    },
+  });
+
   const completed = (sources.data ?? []).filter((s) => s.status === "COMPLETED").length;
 
   const filtered = useMemo(() => {
@@ -163,6 +171,14 @@ export function KnowledgePage() {
                         <Link to={`/knowledge/${s.id}`} className="btn btn-secondary btn-sm">
                           Manage →
                         </Link>
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm btn-icon"
+                          onClick={() => { if (confirm(`Delete source "${s.name}" and all its documents?`)) deleteSource.mutate(s.id); }}
+                          aria-label="Delete source"
+                        >
+                          <IconTrash size={14} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -368,7 +384,9 @@ export function KnowledgeSourcePage() {
           <tbody>
             {(documents.data ?? []).map((d) => (
               <tr key={d.id}>
-                <td className="cell-primary">{d.title}</td>
+                <td className="cell-primary">
+                  <Link to={`/knowledge/${sourceId}/documents/${d.id}`} className="link">{d.title}</Link>
+                </td>
                 <td><span className={statusClass(d.status.toLowerCase())}>{d.status}</span></td>
                 <td className="text-sm text-muted">{formatDate(d.created_at)}</td>
                 <td>

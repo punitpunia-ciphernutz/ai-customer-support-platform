@@ -10,6 +10,7 @@ import { CustomersPage } from "@/features/customers/CustomersPage";
 import { WebChatPage } from "@/features/conversations/WebChatPage";
 import { InboxPage } from "@/features/inbox/InboxPage";
 import { KnowledgePage, KnowledgeSourcePage } from "@/features/knowledge/KnowledgePage";
+import { KnowledgeDocumentPage } from "@/features/knowledge/KnowledgeDocumentPage";
 import { AppShell } from "@/components/shared/AppShell";
 import { TicketsPage } from "@/features/tickets/TicketsPage";
 import { TeamsPage } from "@/features/teams/TeamsPage";
@@ -59,6 +60,7 @@ export function AppRouter() {
                 <Route path="/app/channels" element={<Navigate to="/settings/channels" replace />} />
                 <Route path="/knowledge" element={<KnowledgePage />} />
                 <Route path="/knowledge/:sourceId" element={<KnowledgeSourcePage />} />
+                <Route path="/knowledge/:sourceId/documents/:documentId" element={<KnowledgeDocumentPage />} />
                 <Route path="/app/knowledge" element={<Navigate to="/knowledge" replace />} />
                 <Route path="/app/knowledge/:sourceId" element={<KnowledgeAppRedirect />} />
                 <Route path="/tickets" element={<TicketsPage />} />

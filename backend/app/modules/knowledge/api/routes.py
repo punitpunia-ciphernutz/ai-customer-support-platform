@@ -10,6 +10,7 @@ from app.modules.knowledge.application.knowledge_service import KnowledgeService
 from app.modules.knowledge.domain.models import KnowledgeSourceType
 from app.modules.knowledge.domain.schemas import (
     DocumentAccepted,
+    DocumentDetailOut,
     DocumentOut,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
@@ -17,6 +18,7 @@ from app.modules.knowledge.domain.schemas import (
     KnowledgeSourceCreate,
     KnowledgeSourceOut,
     TextDocumentCreate,
+    TextDocumentUpdate,
     URLDocumentCreate,
 )
 from app.modules.knowledge.infrastructure.vectorstore import PgVectorRetriever
@@ -222,6 +224,53 @@ async def retry_source_documents(
     for item in accepted:
         ingest_document.delay(item.document.id)
     return accepted
+
+
+@router.get("/documents/{document_id}", response_model=DocumentDetailOut)
+async def get_document(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(KNOWLEDGE_READ)),
+) -> DocumentDetailOut:
+    document = await KnowledgeService(db).get_document(user.organization_id, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    return DocumentDetailOut.model_validate(document)
+
+
+@router.patch("/documents/{document_id}", response_model=DocumentAccepted, status_code=status.HTTP_200_OK)
+async def update_document(
+    document_id: str,
+    body: TextDocumentUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(KNOWLEDGE_WRITE)),
+) -> DocumentAccepted:
+    if body.title is None and body.content is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide title or content to update")
+    service = KnowledgeService(db)
+    try:
+        document = await service.update_text_document(
+            user.organization_id, document_id, title=body.title, content=body.content
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    await db.commit()
+    ingest_document.delay(document.id)
+    return DocumentAccepted(document=DocumentOut.model_validate(document), job_queued=True)
+
+
+@router.delete("/sources/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_source(
+    source_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(KNOWLEDGE_WRITE)),
+) -> None:
+    deleted = await KnowledgeService(db).delete_source(user.organization_id, source_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge source not found")
+    await db.commit()
 
 
 @router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

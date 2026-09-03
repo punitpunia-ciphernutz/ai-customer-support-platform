@@ -81,6 +81,15 @@ class KnowledgeSearchResponse(BaseModel):
     results: list[KnowledgeSearchResult]
 
 
+class DocumentDetailOut(DocumentOut):
+    content: str | None = None
+
+
+class TextDocumentUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=512)
+    content: str | None = Field(default=None, min_length=1)
+
+
 class DocumentAccepted(BaseModel):
     document: DocumentOut
     job_queued: bool = True
