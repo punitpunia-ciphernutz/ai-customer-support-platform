@@ -39,6 +39,15 @@ ALL_PERMISSIONS = [
     AI_WRITE,
 ]
 
+# OWNER == ADMIN > MANAGER > AGENT == READ_ONLY
+ROLE_RANK: dict[RoleName, int] = {
+    RoleName.OWNER: 3,
+    RoleName.ADMIN: 3,
+    RoleName.MANAGER: 2,
+    RoleName.AGENT: 1,
+    RoleName.READ_ONLY: 1,
+}
+
 ROLE_PERMISSIONS: dict[RoleName, list[str]] = {
     RoleName.OWNER: list(ALL_PERMISSIONS),
     RoleName.ADMIN: list(ALL_PERMISSIONS),
@@ -51,6 +60,7 @@ ROLE_PERMISSIONS: dict[RoleName, list[str]] = {
         TICKETS_READ,
         TICKETS_WRITE,
         USERS_READ,
+        USERS_WRITE,
         TEAMS_READ,
         TEAMS_WRITE,
         SETTINGS_READ,
@@ -85,3 +95,17 @@ ROLE_PERMISSIONS: dict[RoleName, list[str]] = {
         AI_READ,
     ],
 }
+
+
+def role_rank(role: RoleName) -> int:
+    return ROLE_RANK[role]
+
+
+def can_assign_role(actor_role: RoleName, target_role: RoleName) -> bool:
+    """Actor may only assign roles at or below their own rank."""
+    return role_rank(actor_role) >= role_rank(target_role)
+
+
+def can_manage_user(actor_role: RoleName, target_role: RoleName) -> bool:
+    """Actor may manage users whose current role is at or below their rank."""
+    return role_rank(actor_role) >= role_rank(target_role)

@@ -47,12 +47,23 @@ export type UserTeamBrief = {
   name: string;
 };
 
+export type UserRoleBrief = {
+  id: string;
+  name: RoleName;
+};
+
 export type UserListItem = {
   id: string;
   email: string;
   full_name: string;
   is_active: boolean;
+  role: UserRoleBrief;
   teams?: UserTeamBrief[];
+};
+
+export type RoleCatalogItem = {
+  name: RoleName;
+  permissions: string[];
 };
 
 export type Team = {

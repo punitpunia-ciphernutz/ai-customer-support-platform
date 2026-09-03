@@ -16,6 +16,7 @@ from app.modules.notifications.api.routes import preferences_router as notificat
 from app.modules.notifications.api.routes import router as notifications_router
 from app.modules.teams.router import router as teams_router
 from app.modules.tickets.router import router as tickets_router
+from app.modules.users.router import router as users_router
 
 api_router = APIRouter()
 
@@ -30,6 +31,7 @@ api_router.include_router(customers_router)
 api_router.include_router(conversations_router)
 api_router.include_router(tickets_router)
 api_router.include_router(teams_router)
+api_router.include_router(users_router)
 api_router.include_router(knowledge_router)
 api_router.include_router(ai_router)
 api_router.include_router(agents_router)

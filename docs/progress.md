@@ -1,15 +1,30 @@
 # Progress — AI Customer Support Platform
 
-Last updated: 2026-09-03 (Teams management + demo roster reseed)
+Last updated: 2026-09-03 (User admin RBAC)
 
 ## Status summary
 
 **Day 1–4:** Complete (re-audited 2026-09-01).  
 **Day 5:** **Complete** — Email channel, omnichannel foundation, unified inbox.  
 **Day 6:** **Complete** — Automation engine, routing, business hours, SLA, notifications, missed chat; audit fixes applied.  
-**Teams management:** **Complete** — membership CRUD API + Teams page (assign/remove, edit/delete, membership visibility).
+**Teams management:** **Complete** — membership CRUD API + Teams page (assign/remove, edit/delete, membership visibility).  
+**User admin RBAC:** **Complete** — create users, change roles, activate/deactivate, reset password (hierarchy-guarded).
 
 LLM: **Google Gemini** when `GEMINI_API_KEY` is set; otherwise **Echo/heuristic** + offline lexical embeddings.
+
+---
+
+## User admin RBAC (2026-09-03)
+
+| Area | Work |
+|------|------|
+| Perms | `users.write` for OWNER, ADMIN, **MANAGER**; role hierarchy helpers |
+| API | `GET/POST/PATCH /users`, `GET /roles`, `POST /users/{id}/reset-password` |
+| Rules | Cannot assign above own rank; cannot deactivate self; cannot demote last OWNER |
+| UI | Teams → Organization Members: Add User, Edit role, Activate/Deactivate, Reset password |
+| Tests | `tests/test_users_api.py` |
+
+Managers may staff **MANAGER / AGENT / READ_ONLY** only. OWNER/ADMIN may assign any role.
 
 ---
 
@@ -89,7 +104,7 @@ Shared password for all demo users: **`agent123!`**
 |------|------|-------|----------|-------|---------|
 | OWNER | Ava Owner | `owner@example.com` | `agent123!` | — | Full admin / settings |
 | ADMIN | Noah Admin | `admin@example.com` | `agent123!` | — | Org admin |
-| MANAGER | Maya Manager | `manager@example.com` | `agent123!` | Support | Teams management, escalations, NOTIFY_MANAGER |
+| MANAGER | Maya Manager | `manager@example.com` | `agent123!` | Support | Teams + user admin (agents/managers), escalations |
 | AGENT | Alex Agent | `agent@example.com` | `agent123!` | Support, Billing | Primary inbox agent |
 | AGENT | Priya Shah | `priya.support@example.com` | `agent123!` | Support | Round-robin / Team inbox |
 | AGENT | Jordan Lee | `jordan.billing@example.com` | `agent123!` | Billing | Billing routing / NOTIFY_TEAM |

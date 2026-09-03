@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_permission
 from app.infrastructure.database.models import User
 from app.infrastructure.database.session import get_db
-from app.modules.auth.permissions import TEAMS_READ, TEAMS_WRITE, USERS_READ
+from app.modules.auth.permissions import TEAMS_READ, TEAMS_WRITE
 from app.modules.teams.schemas import (
     TeamCreate,
     TeamDetailOut,
@@ -14,7 +14,6 @@ from app.modules.teams.schemas import (
     TeamMemberOut,
     TeamOut,
     TeamUpdate,
-    UserListItem,
 )
 from app.modules.teams.service import TeamService, TeamServiceError
 
@@ -157,11 +156,3 @@ async def remove_team_member(
     except TeamServiceError as exc:
         _raise(exc)
     return Response(status_code=204)
-
-
-@router.get("/users", response_model=list[UserListItem])
-async def list_users(
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_permission(USERS_READ)),
-) -> list[UserListItem]:
-    return await TeamService(db).list_users(user.organization_id)

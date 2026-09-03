@@ -2,10 +2,8 @@
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-
 from app.infrastructure.database.models import Conversation, Team, TeamMember, Ticket, User
-from app.modules.teams.schemas import TeamMemberOut, TeamOut, UserListItem, UserTeamBrief
+from app.modules.teams.schemas import TeamMemberOut, TeamOut
 
 
 class TeamServiceError(Exception):
@@ -161,37 +159,6 @@ class TeamService:
         await self.db.delete(membership)
         await self.db.flush()
 
-    async def list_users(self, organization_id: str) -> list[UserListItem]:
-        users = list(
-            (
-                await self.db.execute(
-                    select(User)
-                    .where(User.organization_id == organization_id)
-                    .options(selectinload(User.team_memberships).selectinload(TeamMember.team))
-                    .order_by(User.full_name)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        items: list[UserListItem] = []
-        for user in users:
-            teams = [
-                UserTeamBrief(id=m.team.id, name=m.team.name)
-                for m in user.team_memberships
-                if m.team is not None and m.team.organization_id == organization_id
-            ]
-            teams.sort(key=lambda t: t.name.lower())
-            items.append(
-                UserListItem(
-                    id=user.id,
-                    email=user.email,
-                    full_name=user.full_name,
-                    is_active=user.is_active,
-                    teams=teams,
-                )
-            )
-        return items
 
     async def _ensure_unique_name(
         self,

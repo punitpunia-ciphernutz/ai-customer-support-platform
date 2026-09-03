@@ -198,7 +198,7 @@ docker compose exec backend pytest -q tests/test_day3_agent.py
 | AGENT | Sam Rivera | `sam.both@example.com` | `agent123!` | Support, Billing |
 | READ_ONLY | Riley Reader | `readonly@example.com` | `agent123!` | — |
 
-**Scenario tips:** login as Maya to manage teams; use Priya + Alex + Sam for Support round-robin; Jordan for Billing-only; Riley to confirm read-only 403s.
+**Scenario tips:** login as Maya to manage teams **and** invite/edit agents; use Priya + Alex + Sam for Support round-robin; Jordan for Billing-only; Riley to confirm read-only 403s; Ava/Noah for OWNER/ADMIN-only actions.
 
 ## 5. Day 6 verification
 

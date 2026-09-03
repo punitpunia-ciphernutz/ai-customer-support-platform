@@ -39,18 +39,3 @@ class TeamDetailOut(TeamOut):
 
 class TeamMemberCreate(BaseModel):
     user_id: str
-
-
-class UserTeamBrief(BaseModel):
-    id: str
-    name: str
-
-
-class UserListItem(BaseModel):
-    id: str
-    email: str
-    full_name: str
-    is_active: bool
-    teams: list[UserTeamBrief] = []
-
-    model_config = {"from_attributes": True}

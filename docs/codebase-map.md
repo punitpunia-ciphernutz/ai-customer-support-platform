@@ -170,13 +170,21 @@ Each business area lives under `app/modules/<name>/`.
 | `router.py` | Ticket CRUD + resolve/close timestamps + audit |
 | `schemas.py` | Ticket DTOs |
 
-#### Teams / users list — `modules/teams/`
+#### Teams — `modules/teams/`
 
 | File | Role |
 |------|------|
-| `router.py` | Team CRUD + membership + `GET /users` (with teams) |
-| `schemas.py` | Team / member / user list DTOs |
+| `router.py` | Team CRUD + membership |
+| `schemas.py` | Team / member DTOs |
 | `service.py` | Membership, unique name, delete guards |
+
+#### Users — `modules/users/`
+
+| File | Role |
+|------|------|
+| `router.py` | `GET/POST/PATCH /users`, `GET /roles`, password reset |
+| `schemas.py` | User list (role + teams), create/update DTOs |
+| `service.py` | Hierarchy guards, audit (`user.created`, `user.role_changed`) |
 
 #### Inbox realtime — `modules/inbox/`
 
@@ -352,7 +360,7 @@ Nav links live in `components/shared/AppShell.tsx`.
 | `features/conversations/` | Customer-facing web chat | `/public/conversations...` + `/ws/public` |
 | `features/knowledge/` | Sources list, add TEXT/PDF/URL, status, delete | `/knowledge/...` |
 | `features/tickets|settings/` | Placeholders for later UI | (APIs exist on backend) |
-| `features/teams/` | Create/edit/delete teams; add/remove members; membership badges | `/teams`, `/users` |
+| `features/teams/` | Teams + org user admin (roles, invite-with-temp-password, deactivate) | `/teams`, `/users`, `/roles` |
 
 ### 4.4 Shared frontend utilities
 
