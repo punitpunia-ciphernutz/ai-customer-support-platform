@@ -648,6 +648,33 @@ a:hover {
   gap: 0.75rem;
 }
 
+/* ── Agent availability (inbox header) ── */
+.availability-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.status-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted);
+}
+
+.status-dot.status-online {
+  background: #22c55e;
+}
+
+.status-dot.status-away {
+  background: #eab308;
+}
+
+.status-dot.status-offline {
+  background: var(--text-muted);
+}
+
 /* ── Filters ── */
 .filter-pills {
   display: flex;
