@@ -22,6 +22,60 @@ import {
 import { SettingsSubNav } from "@/components/shared/SettingsSubNav";
 import { cn } from "@/utils/cn";
 
+type SettingsDraft = {
+  enabled: boolean;
+  mode: AIMode;
+  auto_reply_threshold: number;
+  escalation_threshold: number;
+  require_knowledge: boolean;
+  escalate_if_unknown: boolean;
+  multilingual_enabled: boolean;
+  ai_response_timeout_seconds: number;
+  allowed_intents: string[] | null;
+  restricted_intents: string[];
+  intent_team_map: Record<string, string>;
+};
+
+function emptyTeamMap(): Record<string, string> {
+  return Object.fromEntries(INTENT_LABELS.map((intent) => [intent, ""]));
+}
+
+function draftFromConfig(config: AIConfig): SettingsDraft {
+  return {
+    enabled: config.enabled,
+    mode: config.mode,
+    auto_reply_threshold: config.auto_reply_threshold,
+    escalation_threshold: config.escalation_threshold,
+    require_knowledge: config.require_knowledge ?? true,
+    escalate_if_unknown: config.escalate_if_unknown ?? true,
+    multilingual_enabled: config.multilingual_enabled ?? true,
+    ai_response_timeout_seconds: config.ai_response_timeout_seconds ?? 60,
+    allowed_intents: config.allowed_intents,
+    restricted_intents: config.restricted_intents ?? [],
+    intent_team_map: { ...emptyTeamMap(), ...(config.intent_team_map ?? {}) },
+  };
+}
+
+function payloadFromDraft(draft: SettingsDraft): Partial<AIConfig> {
+  const intent_team_map: Record<string, string> = {};
+  for (const [intent, teamName] of Object.entries(draft.intent_team_map)) {
+    if (teamName.trim()) intent_team_map[intent] = teamName.trim();
+  }
+  return {
+    enabled: draft.enabled,
+    mode: draft.mode,
+    auto_reply_threshold: draft.auto_reply_threshold,
+    escalation_threshold: draft.escalation_threshold,
+    require_knowledge: draft.require_knowledge,
+    escalate_if_unknown: draft.escalate_if_unknown,
+    multilingual_enabled: draft.multilingual_enabled,
+    ai_response_timeout_seconds: draft.ai_response_timeout_seconds,
+    allowed_intents: draft.allowed_intents,
+    restricted_intents: draft.restricted_intents,
+    intent_team_map,
+  };
+}
+
 export function SettingsPage() {
   const qc = useQueryClient();
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -30,7 +84,7 @@ export function SettingsPage() {
   const [testMessage, setTestMessage] = useState("How do I reset my password?");
   const [testResult, setTestResult] = useState<AITestResponse | null>(null);
   const [testErr, setTestErr] = useState<string | null>(null);
-  const [teamMapDraft, setTeamMapDraft] = useState<Record<string, string>>({});
+  const [draft, setDraft] = useState<SettingsDraft | null>(null);
 
   const aiConfig = useQuery({
     queryKey: ["ai-config"],
@@ -57,8 +111,9 @@ export function SettingsPage() {
   const patchConfig = useMutation({
     mutationFn: (body: Partial<AIConfig>) =>
       api<AIConfig>("/ai/config", { method: "PATCH", body: JSON.stringify(body) }),
-    onSuccess: () => {
-      setSaveMsg("AI settings saved.");
+    onSuccess: (saved) => {
+      setDraft(draftFromConfig(saved));
+      setSaveMsg("Settings saved.");
       setSaveErr(null);
       void qc.invalidateQueries({ queryKey: ["ai-config"] });
     },
@@ -88,30 +143,31 @@ export function SettingsPage() {
   const config = aiConfig.data;
 
   useEffect(() => {
-    if (config?.intent_team_map) {
-      setTeamMapDraft(config.intent_team_map);
-    }
-  }, [config?.intent_team_map]);
+    if (config) setDraft((current) => current ?? draftFromConfig(config));
+  }, [config]);
 
-  const toggleIntent = (
-    field: "allowed_intents" | "restricted_intents",
-    intent: IntentLabel
-  ) => {
-    if (!config) return;
-    const current = config[field] ?? [];
+  const dirty =
+    !!draft &&
+    !!config &&
+    JSON.stringify(payloadFromDraft(draft)) !== JSON.stringify(payloadFromDraft(draftFromConfig(config)));
+
+  const updateDraft = (patch: Partial<SettingsDraft>) => {
+    setDraft((current) => (current ? { ...current, ...patch } : current));
+    setSaveMsg(null);
+  };
+
+  const toggleIntent = (field: "allowed_intents" | "restricted_intents", intent: IntentLabel) => {
+    if (!draft) return;
+    const current = draft[field] ?? [];
     const next = current.includes(intent)
       ? current.filter((i) => i !== intent)
       : [...current, intent];
-    patchConfig.mutate({ [field]: next });
+    updateDraft({ [field]: next });
   };
 
-  const saveTeamMap = () => {
-    if (!config) return;
-    const map: Record<string, string> = {};
-    for (const [intent, teamName] of Object.entries(teamMapDraft)) {
-      if (teamName.trim()) map[intent] = teamName.trim();
-    }
-    patchConfig.mutate({ intent_team_map: map });
+  const saveSettings = () => {
+    if (!draft) return;
+    patchConfig.mutate(payloadFromDraft(draft));
   };
 
   return (
@@ -119,6 +175,18 @@ export function SettingsPage() {
       <PageHeader
         title="Settings"
         description="Configure AI support behavior, thresholds, intent routing, and review recent AI runs."
+        action={
+          draft ? (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={saveSettings}
+              disabled={!dirty || patchConfig.isPending}
+            >
+              {patchConfig.isPending ? "Saving…" : "Save settings"}
+            </button>
+          ) : undefined
+        }
       />
       <SettingsSubNav />
 
@@ -154,14 +222,14 @@ export function SettingsPage() {
               : "Failed to load AI configuration."}
           </Alert>
         )}
-        {config && (
+        {draft && (
           <>
             <div className="flex items-center gap-4 mb-4" style={{ flexWrap: "wrap" }}>
               <label className="flex items-center gap-2" style={{ cursor: "pointer", fontSize: "0.875rem" }}>
                 <input
                   type="checkbox"
-                  checked={config.enabled}
-                  onChange={(e) => patchConfig.mutate({ enabled: e.target.checked })}
+                  checked={draft.enabled}
+                  onChange={(e) => updateDraft({ enabled: e.target.checked })}
                   disabled={patchConfig.isPending}
                 />
                 AI Support enabled
@@ -171,8 +239,8 @@ export function SettingsPage() {
                 <select
                   id="ai-mode"
                   className="form-select"
-                  value={config.mode}
-                  onChange={(e) => patchConfig.mutate({ mode: e.target.value as AIMode })}
+                  value={draft.mode}
+                  onChange={(e) => updateDraft({ mode: e.target.value as AIMode })}
                   disabled={patchConfig.isPending}
                 >
                   <option value="DRAFT_ONLY">Knowledge Base — send when grounded, else escalate</option>
@@ -185,7 +253,7 @@ export function SettingsPage() {
             <div className="grid-2">
               <div className="form-field">
                 <label className="form-label" htmlFor="auto-threshold">
-                  Auto-reply threshold ({formatPercent(config.auto_reply_threshold)})
+                  Auto-reply threshold ({formatPercent(draft.auto_reply_threshold)})
                 </label>
                 <input
                   id="auto-threshold"
@@ -193,9 +261,9 @@ export function SettingsPage() {
                   min={0}
                   max={1}
                   step={0.01}
-                  value={config.auto_reply_threshold}
+                  value={draft.auto_reply_threshold}
                   onChange={(e) =>
-                    patchConfig.mutate({ auto_reply_threshold: parseFloat(e.target.value) })
+                    updateDraft({ auto_reply_threshold: parseFloat(e.target.value) })
                   }
                   disabled={patchConfig.isPending}
                   style={{ width: "100%" }}
@@ -204,7 +272,7 @@ export function SettingsPage() {
               </div>
               <div className="form-field">
                 <label className="form-label" htmlFor="esc-threshold">
-                  Escalation threshold ({formatPercent(config.escalation_threshold)})
+                  Escalation threshold ({formatPercent(draft.escalation_threshold)})
                 </label>
                 <input
                   id="esc-threshold"
@@ -212,9 +280,9 @@ export function SettingsPage() {
                   min={0}
                   max={1}
                   step={0.01}
-                  value={config.escalation_threshold}
+                  value={draft.escalation_threshold}
                   onChange={(e) =>
-                    patchConfig.mutate({ escalation_threshold: parseFloat(e.target.value) })
+                    updateDraft({ escalation_threshold: parseFloat(e.target.value) })
                   }
                   disabled={patchConfig.isPending}
                   style={{ width: "100%" }}
@@ -227,8 +295,8 @@ export function SettingsPage() {
               <label className="flex items-center gap-2" style={{ cursor: "pointer", fontSize: "0.875rem" }}>
                 <input
                   type="checkbox"
-                  checked={config.require_knowledge ?? true}
-                  onChange={(e) => patchConfig.mutate({ require_knowledge: e.target.checked })}
+                  checked={draft.require_knowledge}
+                  onChange={(e) => updateDraft({ require_knowledge: e.target.checked })}
                   disabled={patchConfig.isPending}
                 />
                 Require knowledge before answering
@@ -236,8 +304,8 @@ export function SettingsPage() {
               <label className="flex items-center gap-2" style={{ cursor: "pointer", fontSize: "0.875rem" }}>
                 <input
                   type="checkbox"
-                  checked={config.escalate_if_unknown ?? true}
-                  onChange={(e) => patchConfig.mutate({ escalate_if_unknown: e.target.checked })}
+                  checked={draft.escalate_if_unknown}
+                  onChange={(e) => updateDraft({ escalate_if_unknown: e.target.checked })}
                   disabled={patchConfig.isPending}
                 />
                 Escalate if unknown
@@ -245,8 +313,8 @@ export function SettingsPage() {
               <label className="flex items-center gap-2" style={{ cursor: "pointer", fontSize: "0.875rem" }}>
                 <input
                   type="checkbox"
-                  checked={config.multilingual_enabled ?? true}
-                  onChange={(e) => patchConfig.mutate({ multilingual_enabled: e.target.checked })}
+                  checked={draft.multilingual_enabled}
+                  onChange={(e) => updateDraft({ multilingual_enabled: e.target.checked })}
                   disabled={patchConfig.isPending}
                 />
                 Multilingual responses
@@ -254,7 +322,7 @@ export function SettingsPage() {
             </div>
             <div className="form-field" style={{ maxWidth: 280 }}>
               <label className="form-label" htmlFor="ai-response-timeout">
-                AI response timeout ({config.ai_response_timeout_seconds ?? 60}s)
+                AI response timeout ({draft.ai_response_timeout_seconds}s)
               </label>
               <input
                 id="ai-response-timeout"
@@ -262,18 +330,15 @@ export function SettingsPage() {
                 min={15}
                 max={180}
                 step={5}
-                value={config.ai_response_timeout_seconds ?? 60}
+                value={draft.ai_response_timeout_seconds}
                 onChange={(e) =>
-                  patchConfig.mutate({ ai_response_timeout_seconds: parseInt(e.target.value, 10) })
+                  updateDraft({ ai_response_timeout_seconds: parseInt(e.target.value, 10) })
                 }
                 disabled={patchConfig.isPending}
                 style={{ width: "100%" }}
               />
               <span className="form-hint">Create a ticket if AI does not respond in time</span>
             </div>
-            {config.mode_display && (
-              <p className="form-hint">Display mode: {config.mode_display.replace(/_/g, " ")}</p>
-            )}
           </>
         )}
       </section>
@@ -284,11 +349,12 @@ export function SettingsPage() {
         <EvalRunButton />
       </section>
 
-      {config && (
+      {draft && (
         <section className="card mb-6">
           <h2 className="section-title">Intent Configuration</h2>
           <p className="form-hint mb-4">
             Allowed intents are processed by AI. Restricted intents always escalate.
+            Click Save settings to apply changes.
           </p>
 
           <div className="grid-2 mb-4">
@@ -296,7 +362,7 @@ export function SettingsPage() {
               <h3 className="section-title">Allowed Intents</h3>
               <div className="chips mb-4">
                 {INTENT_LABELS.map((intent) => {
-                  const active = (config.allowed_intents ?? []).includes(intent);
+                  const active = (draft.allowed_intents ?? []).includes(intent);
                   return (
                     <button
                       key={`allowed-${intent}`}
@@ -313,7 +379,7 @@ export function SettingsPage() {
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
-                onClick={() => patchConfig.mutate({ allowed_intents: null })}
+                onClick={() => updateDraft({ allowed_intents: null })}
                 disabled={patchConfig.isPending}
               >
                 Clear (allow all)
@@ -324,7 +390,7 @@ export function SettingsPage() {
               <h3 className="section-title">Restricted Intents</h3>
               <div className="chips mb-4">
                 {INTENT_LABELS.map((intent) => {
-                  const active = (config.restricted_intents ?? []).includes(intent);
+                  const active = draft.restricted_intents.includes(intent);
                   return (
                     <button
                       key={`restricted-${intent}`}
@@ -341,7 +407,7 @@ export function SettingsPage() {
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
-                onClick={() => patchConfig.mutate({ restricted_intents: [] })}
+                onClick={() => updateDraft({ restricted_intents: [] })}
                 disabled={patchConfig.isPending}
               >
                 Clear restrictions
@@ -350,6 +416,10 @@ export function SettingsPage() {
           </div>
 
           <h3 className="section-title">Intent → Team Routing</h3>
+          <p className="form-hint mb-4">
+            When AI escalates, the ticket is assigned to this team. Use an existing team name
+            (e.g. Billing). Unmapped intents go to Support. Automations are not changed.
+          </p>
           <div style={{ display: "grid", gap: "0.5rem", maxWidth: 520 }}>
             {INTENT_LABELS.map((intent) => (
               <div key={intent} className="flex items-center gap-3">
@@ -359,16 +429,25 @@ export function SettingsPage() {
                 <input
                   className="form-input"
                   placeholder="Team name (e.g. Billing)"
-                  value={teamMapDraft[intent] ?? ""}
+                  value={draft.intent_team_map[intent] ?? ""}
                   onChange={(e) =>
-                    setTeamMapDraft((prev) => ({ ...prev, [intent]: e.target.value }))
+                    updateDraft({
+                      intent_team_map: { ...draft.intent_team_map, [intent]: e.target.value },
+                    })
                   }
-                  onBlur={saveTeamMap}
                   disabled={patchConfig.isPending}
                 />
               </div>
             ))}
           </div>
+          <button
+            type="button"
+            className="btn btn-primary mt-4"
+            onClick={saveSettings}
+            disabled={!dirty || patchConfig.isPending}
+          >
+            {patchConfig.isPending ? "Saving…" : "Save settings"}
+          </button>
         </section>
       )}
 

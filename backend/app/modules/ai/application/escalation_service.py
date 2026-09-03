@@ -5,10 +5,11 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.infrastructure.database.models import ActorType, Message, Priority, SenderType, Team, Ticket, TicketSource, TicketStatus
+from app.infrastructure.database.models import Message, Priority, SenderType, Team, Ticket, TicketSource, TicketStatus
 from app.infrastructure.events import DomainEvent, event_bus
 from app.modules.ai.domain.schemas import AIHandoffPackage, SupportAgentState
 from app.modules.conversations.service import ConversationService
+from app.modules.notifications.application.service import NotificationService
 
 
 class EscalationService:
@@ -225,17 +226,23 @@ class EscalationService:
         return ticket
 
     async def _resolve_team_id(
-        self, organization_id: str, state: SupportAgentState, intent_team_map: dict[str, str]  # noqa: ARG002
+        self, organization_id: str, state: SupportAgentState, intent_team_map: dict[str, str]
     ) -> str | None:
-        """Team routing is handled by automations — default escalations to Support."""
-        team_name = "Support"
-        result = await self.db.execute(
-            select(Team).where(Team.organization_id == organization_id, Team.name == team_name)
+        """Assign AI escalation tickets from Settings intent → team map; else Support.
+
+        Automations are unchanged and may still assign conversations independently.
+        """
+        mapped = ""
+        if state.intent and intent_team_map:
+            mapped = (intent_team_map.get(state.intent.value) or "").strip()
+        notifier = NotificationService(self.db)
+        team_id = await notifier.resolve_team_id(organization_id, mapped or "Support")
+        if team_id is None and mapped:
+            team_id = await notifier.resolve_team_id(organization_id, "Support")
+        if team_id is not None:
+            return team_id
+        fallback = await self.db.execute(
+            select(Team).where(Team.organization_id == organization_id).limit(1)
         )
-        team = result.scalar_one_or_none()
-        if team is None:
-            fallback = await self.db.execute(
-                select(Team).where(Team.organization_id == organization_id).limit(1)
-            )
-            team = fallback.scalar_one_or_none()
+        team = fallback.scalar_one_or_none()
         return team.id if team else None
