@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { ReactNode } from "react";
 import { useAuth } from "@/features/auth/AuthContext";
+import { useTheme } from "@/app/ThemeContext";
 import { NotificationBell } from "@/features/notifications/NotificationBell";
 import {
   IconBook,
@@ -8,7 +9,9 @@ import {
   IconInbox,
   IconLogout,
   IconAutomation,
+  IconMoon,
   IconSettings,
+  IconSun,
   IconSupport,
   IconTeam,
   IconTicket,
@@ -29,6 +32,7 @@ const NAV = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
 
   const isActive = (to: string, exact?: boolean) =>
@@ -60,6 +64,16 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="sidebar-footer">
+          <button
+            type="button"
+            className="sidebar-link"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            title={theme === "dark" ? "Light mode" : "Dark mode"}
+          >
+            {theme === "dark" ? <IconSun size={18} /> : <IconMoon size={18} />}
+            {theme === "dark" ? "Light mode" : "Dark mode"}
+          </button>
           <NotificationBell />
           {user && (
             <div className="sidebar-user">

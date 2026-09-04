@@ -220,7 +220,7 @@ export function KnowledgeDocumentPage() {
                 maxHeight: "70vh",
                 overflow: "auto",
                 padding: "1rem",
-                background: "var(--surface-alt, rgba(255,255,255,0.03))",
+                background: "var(--hover)",
                 borderRadius: "0.5rem",
               }}>
                 {doc.content ?? "(No content — document may still be processing)"}
