@@ -13,6 +13,7 @@ from app.infrastructure.database.models import (
     Ticket,
 )
 from app.infrastructure.database.session import AsyncSessionLocal
+from app.modules.ai.application.ai_config_service import get_or_create_ai_config
 from app.modules.ai.application.ai_service import AIService
 from app.modules.ai.domain.models import AIMode, BotConfiguration
 from app.modules.ai.infrastructure.llm.providers import EchoLLMProvider
@@ -80,7 +81,7 @@ async def test_email_knowledge_base_sends_when_grounded() -> None:
 
 
 @pytest.mark.asyncio
-async def test_email_knowledge_base_escalates_unknown() -> None:
+async def test_email_knowledge_base_soft_refuses_unknown() -> None:
     async with AsyncSessionLocal() as session:
         org_id = (await session.execute(select(Organization.id).limit(1))).scalar_one()
         bot = (
@@ -92,8 +93,10 @@ async def test_email_knowledge_base_escalates_unknown() -> None:
             )
         ).scalar_one()
         bot.mode = AIMode.DRAFT_ONLY
+        cfg = await get_or_create_ai_config(session, org_id)
+        cfg.response_policy_enabled = True
 
-        customer = Customer(organization_id=org_id, name="KB Escalate Email", email="kbesc@example.com")
+        customer = Customer(organization_id=org_id, name="KB Soft Email", email="kbsoft@example.com")
         session.add(customer)
         await session.flush()
         conv = Conversation(
@@ -119,7 +122,7 @@ async def test_email_knowledge_base_escalates_unknown() -> None:
         )
 
         tickets = (await session.execute(select(Ticket).where(Ticket.conversation_id == conv.id))).scalars().all()
-        assert len(tickets) == 1
+        assert len(tickets) == 0
         ai_msgs = (
             await session.execute(
                 select(Message).where(
@@ -128,5 +131,5 @@ async def test_email_knowledge_base_escalates_unknown() -> None:
                 )
             )
         ).scalars().all()
-        assert len(ai_msgs) == 0
+        assert len(ai_msgs) == 1
         await session.rollback()

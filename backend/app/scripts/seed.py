@@ -301,6 +301,16 @@ def seed() -> None:
                     llm_model="gemini-3.1-flash-lite",
                     restricted_intents=["OTHER"],
                     intent_team_map={},
+                    response_policy_enabled=True,
+                    soft_reply_greetings=True,
+                    ood_soft_refuse=True,
+                    ood_escalates=False,
+                    safe_reply_min_kind_confidence=0.55,
+                    assistant_scope_summary=(
+                        "password resets, account access, billing questions, "
+                        "and other topics in our help center"
+                    ),
+                    assistant_display_name="Support Assistant",
                 )
             )
         else:

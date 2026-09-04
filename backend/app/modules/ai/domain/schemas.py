@@ -27,12 +27,41 @@ class IntentLabel(StrEnum):
     OTHER = "OTHER"
 
 
+class MessageKind(StrEnum):
+    """Conversational act — orthogonal to support IntentLabel. LLM-classified."""
+
+    GREETING = "GREETING"
+    IDENTITY = "IDENTITY"
+    SMALL_TALK = "SMALL_TALK"
+    SUPPORT_REQUEST = "SUPPORT_REQUEST"
+    HUMAN_REQUEST = "HUMAN_REQUEST"
+    OUT_OF_DOMAIN = "OUT_OF_DOMAIN"
+    UNCLEAR = "UNCLEAR"
+
+
+class PolicyAction(StrEnum):
+    SAFE_REPLY = "SAFE_REPLY"
+    SOFT_REFUSE = "SOFT_REFUSE"
+    CONTINUE_SUPPORT = "CONTINUE_SUPPORT"
+    ESCALATE = "ESCALATE"
+    CLARIFY = "CLARIFY"
+
+
+class SoftRefuseKind(StrEnum):
+    """Why a soft refuse was chosen — never treat no-KB as automatic OOD."""
+
+    OUT_OF_DOMAIN = "OUT_OF_DOMAIN"
+    INSUFFICIENT_KNOWLEDGE = "INSUFFICIENT_KNOWLEDGE"
+
+
 class AIClassification(BaseModel):
     intent: IntentLabel
     language: str = Field(default="en", min_length=2, max_length=16)
     sentiment: str = Field(default="neutral")
     confidence: float = Field(ge=0.0, le=1.0)
     requires_human: bool = False
+    message_kind: MessageKind = MessageKind.SUPPORT_REQUEST
+    message_kind_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
 class ClassifyRequest(BaseModel):
@@ -78,6 +107,7 @@ class AgentDecision(StrEnum):
     AI_RESOLVE = "AI_RESOLVE"
     ESCALATE = "ESCALATE"
     SUGGEST_ONLY = "SUGGEST_ONLY"
+    SOFT_REPLY = "SOFT_REPLY"
 
 
 class ConfidenceComponents(BaseModel):
@@ -196,6 +226,8 @@ class SupportAgentState(BaseModel):
     prepared_query: str = ""
     intent: IntentLabel | None = None
     intent_confidence: float = 0.0
+    message_kind: MessageKind | None = None
+    message_kind_confidence: float = 0.0
     retrieved_documents: list[RetrievedDocument] = Field(default_factory=list)
     retrieval_score: float = 0.0
     knowledge_available: bool = True
@@ -212,6 +244,9 @@ class SupportAgentState(BaseModel):
     decision: AgentDecision | None = None
     final_response: str | None = None
     human_requested: bool = False
+    policy_action: PolicyAction | None = None
+    policy_allows_ungrounded_send: bool = False
+    soft_refuse_kind: SoftRefuseKind | None = None
     trace_steps: list[AIRunTraceStep] = Field(default_factory=list)
     prompt_version: str | None = None
 
@@ -228,6 +263,8 @@ class AIResponse(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
     decision: AgentDecision
     ai_run_id: str | None = None
+    message_kind: MessageKind | None = None
+    policy_action: PolicyAction | None = None
 
 
 class GeneratedAnswer(BaseModel):
@@ -251,6 +288,8 @@ class AITestResponse(BaseModel):
     escalation_required: bool
     escalation_reason: str | None = None
     decision: AgentDecision
+    message_kind: MessageKind | None = None
+    policy_action: PolicyAction | None = None
 
 
 class LLMModelOption(BaseModel):
@@ -278,6 +317,15 @@ class AIConfigOut(BaseModel):
     restricted_intents: list[str] | None = None
     intent_team_map: dict[str, str] | None = None
     channel_overrides: list[BotConfigurationOut] = Field(default_factory=list)
+    response_policy_enabled: bool = True
+    soft_reply_greetings: bool = True
+    ood_soft_refuse: bool = True
+    ood_escalates: bool = False
+    safe_reply_min_kind_confidence: float = 0.55
+    assistant_scope_summary: str = (
+        "password resets, account access, billing questions, and other topics in our help center"
+    )
+    assistant_display_name: str = "Support Assistant"
 
     model_config = {"from_attributes": True}
 
@@ -300,6 +348,13 @@ class AIConfigUpdate(BaseModel):
     restricted_intents: list[str] | None = None
     intent_team_map: dict[str, str] | None = None
     channel_overrides: list[BotConfigurationUpdate] | None = None
+    response_policy_enabled: bool | None = None
+    soft_reply_greetings: bool | None = None
+    ood_soft_refuse: bool | None = None
+    ood_escalates: bool | None = None
+    safe_reply_min_kind_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    assistant_scope_summary: str | None = Field(default=None, max_length=1000)
+    assistant_display_name: str | None = Field(default=None, max_length=128)
 
 
 class AIRunSummary(BaseModel):

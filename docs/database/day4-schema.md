@@ -92,6 +92,15 @@ Agent online status and schedule for routing.
 | `allowed_intents` | JSONB | `null` = AI may handle all intents |
 | `restricted_intents` | JSONB | listed intents always escalate |
 | `intent_team_map` | JSONB | `{ "GENERAL_QUESTION": "Billing" }` — used when creating **AI escalation tickets**. Unmapped / unknown team names assign to Support. Automations are independent and unchanged. |
+| `response_policy_enabled` | bool | true — kill switch for soft reply / soft refuse |
+| `soft_reply_greetings` | bool | true — greetings / identity / small-talk soft replies |
+| `ood_soft_refuse` | bool | true — OOD and SUPPORT+no-KB soft refuse (no ticket) |
+| `ood_escalates` | bool | false — when true, OOD / no-KB create tickets |
+| `safe_reply_min_kind_confidence` | float | 0.55 |
+| `assistant_scope_summary` | string | used in soft-reply templates |
+| `assistant_display_name` | string | used in identity soft replies |
+
+Migration `0010_response_policy` adds the Response Policy columns (defaults above).
 
 ## Enums
 

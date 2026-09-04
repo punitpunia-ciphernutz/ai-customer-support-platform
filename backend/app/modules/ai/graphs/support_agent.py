@@ -12,14 +12,20 @@ from app.modules.ai.application.conversation_summarizer import ConversationSumma
 from app.modules.ai.application.escalation import detect_human_request, evaluate_escalation
 from app.modules.ai.application.grounding_validator import GroundingValidator
 from app.modules.ai.application.prompt_service import PromptService
+from app.modules.ai.application.response_policy import (
+    apply_policy_to_state,
+    evaluate_early_policy,
+    evaluate_no_kb_policy,
+    render_soft_draft,
+)
 from app.modules.ai.application.runtime_config import RuntimeAIConfig
 from app.modules.ai.application.trace_helper import TraceCollector, trace_step
 from app.modules.ai.domain.schemas import (
     AgentDecision,
     Citation,
-    ConfidenceBreakdown,
     GeneratedAnswer,
-    IntentLabel,
+    MessageKind,
+    PolicyAction,
     RetrievedDocument,
     SupportAgentState,
 )
@@ -34,6 +40,10 @@ from app.modules.knowledge.infrastructure.embeddings import OfflineSemanticEmbed
 from app.modules.knowledge.infrastructure.vectorstore.retriever import PgVectorRetriever, Retriever
 
 logger = logging.getLogger(__name__)
+
+_SOFT_ACTIONS = frozenset(
+    {PolicyAction.SAFE_REPLY, PolicyAction.SOFT_REFUSE, PolicyAction.CLARIFY}
+)
 
 
 def _retriever_for_session(db_session: Any, provider: LLMProvider, retriever: Retriever | None) -> Retriever:
@@ -84,13 +94,42 @@ async def run_support_agent_graph(
                 context={"history": [t.model_dump() for t in s.conversation_history]},
                 llm=provider,
             )
+            kind = classification.message_kind or MessageKind.SUPPORT_REQUEST
             return {
                 "intent": classification.intent,
                 "intent_confidence": classification.confidence,
+                "message_kind": kind,
+                "message_kind_confidence": classification.message_kind_confidence,
                 "sentiment": _normalize_sentiment(classification.sentiment, s.user_message),
                 "language": classification.language,
                 "human_requested": human_requested or classification.requires_human,
             }
+
+    async def apply_response_policy_node(raw: SupportAgentState | dict[str, Any]) -> dict[str, Any]:
+        s = _coerce_state(raw)
+        async with trace_step(collector, "apply_response_policy"):
+            decision = evaluate_early_policy(s, config)
+            apply_policy_to_state(s, decision)
+            out: dict[str, Any] = {
+                "policy_action": s.policy_action,
+                "policy_allows_ungrounded_send": s.policy_allows_ungrounded_send,
+                "soft_refuse_kind": s.soft_refuse_kind,
+                "escalation_required": s.escalation_required,
+                "escalation_reason": s.escalation_reason,
+            }
+            if decision.action in _SOFT_ACTIONS:
+                from app.modules.ai.application.response_policy import PolicyDecision
+
+                draft = render_soft_draft(s, decision, config)
+                out.update(
+                    {
+                        "draft_response": draft,
+                        "grounded": False,
+                        "citations": [],
+                        "knowledge_available": False,
+                    }
+                )
+            return out
 
     async def detect_language_node(raw: SupportAgentState | dict[str, Any]) -> dict[str, Any]:
         s = _coerce_state(raw)
@@ -147,19 +186,31 @@ async def run_support_agent_graph(
                 threshold=config.min_relevance_score,
                 require_knowledge=config.require_knowledge,
             )
-            if not gate.passed:
-                return {
-                    "escalation_required": True,
-                    "escalation_reason": gate.reason or "No sufficiently relevant knowledge found.",
-                    "knowledge_available": False,
-                    "draft_response": (
-                        "I don't have enough information in our knowledge base to answer that confidently. "
-                        f"Regarding: {s.user_message}"
-                    ),
-                    "grounded": False,
-                    "citations": [],
-                }
-            return {"knowledge_available": True}
+            if gate.passed:
+                return {"knowledge_available": True}
+
+            # No KB — Response Policy decides soft refuse vs escalate (not auto-OOD)
+            decision = evaluate_no_kb_policy(s, config)
+            apply_policy_to_state(s, decision)
+            out: dict[str, Any] = {
+                "knowledge_available": False,
+                "grounded": False,
+                "citations": [],
+                "policy_action": s.policy_action,
+                "policy_allows_ungrounded_send": s.policy_allows_ungrounded_send,
+                "soft_refuse_kind": s.soft_refuse_kind,
+                "escalation_required": s.escalation_required,
+                "escalation_reason": s.escalation_reason,
+            }
+            if decision.action in _SOFT_ACTIONS:
+                draft = render_soft_draft(s, decision, config)
+                out["draft_response"] = draft
+            else:
+                out["draft_response"] = (
+                    "I don't have enough information in our knowledge base to answer that confidently. "
+                    f"Regarding: {s.user_message}"
+                )
+            return out
 
     async def generate_answer_node(raw: SupportAgentState | dict[str, Any]) -> dict[str, Any]:
         s = _coerce_state(raw)
@@ -228,6 +279,13 @@ async def run_support_agent_graph(
                     "decision": AgentDecision.AI_RESOLVE,
                     "final_response": merged.draft_response,
                 }
+            if merged.decision == AgentDecision.SOFT_REPLY:
+                return {
+                    "escalation_required": False,
+                    "decision": AgentDecision.SOFT_REPLY,
+                    "final_response": merged.draft_response,
+                    "escalation_reason": None,
+                }
             if merged.decision == AgentDecision.SUGGEST_ONLY:
                 return {
                     "escalation_required": False,
@@ -255,6 +313,7 @@ async def run_support_agent_graph(
         graph = StateGraph(SupportAgentState)
         graph.add_node("load_context", load_context_node)
         graph.add_node("classify_intent", classify_intent_node)
+        graph.add_node("apply_response_policy", apply_response_policy_node)
         graph.add_node("detect_language", detect_language_node)
         graph.add_node("prepare_query", prepare_query_node)
         graph.add_node("retrieve_knowledge", retrieve_knowledge_node)
@@ -267,13 +326,30 @@ async def run_support_agent_graph(
 
         graph.add_edge(START, "load_context")
         graph.add_edge("load_context", "classify_intent")
-        graph.add_edge("classify_intent", "detect_language")
+        graph.add_edge("classify_intent", "apply_response_policy")
+
+        def route_after_policy(s: SupportAgentState) -> str:
+            action = s.policy_action
+            if action in _SOFT_ACTIONS:
+                return "calculate_confidence"
+            if action == PolicyAction.ESCALATE:
+                return "calculate_confidence"
+            return "detect_language"
+
+        graph.add_conditional_edges(
+            "apply_response_policy",
+            route_after_policy,
+            {
+                "calculate_confidence": "calculate_confidence",
+                "detect_language": "detect_language",
+            },
+        )
         graph.add_edge("detect_language", "prepare_query")
         graph.add_edge("prepare_query", "retrieve_knowledge")
         graph.add_edge("retrieve_knowledge", "evaluate_retrieved_context")
 
         def route_after_knowledge(s: SupportAgentState) -> str:
-            if s.knowledge_available is False or s.escalation_required:
+            if s.knowledge_available is False:
                 return "calculate_confidence"
             return "generate_answer"
 
@@ -287,7 +363,7 @@ async def run_support_agent_graph(
         graph.add_edge("calculate_confidence", "decision")
 
         def route_after_decision(s: SupportAgentState) -> str:
-            if s.decision == AgentDecision.AI_RESOLVE:
+            if s.decision in {AgentDecision.AI_RESOLVE, AgentDecision.SOFT_REPLY}:
                 return "finalize_response"
             return END
 
@@ -348,74 +424,93 @@ async def _fallback_support_agent(
         classification = await run_classification_graph(state.user_message, llm=llm)
         state.intent = classification.intent
         state.intent_confidence = classification.confidence
+        state.message_kind = classification.message_kind or MessageKind.SUPPORT_REQUEST
+        state.message_kind_confidence = classification.message_kind_confidence
         state.sentiment = _normalize_sentiment(classification.sentiment, state.user_message)
         state.language = classification.language
         state.human_requested = state.human_requested or classification.requires_human
 
-    async with trace_step(trace, "fallback_detect_language"):
-        state.language = state.language or "en"
+    async with trace_step(trace, "fallback_apply_response_policy"):
+        early = evaluate_early_policy(state, config)
+        apply_policy_to_state(state, early)
+        if early.action in _SOFT_ACTIONS:
+            state.draft_response = render_soft_draft(state, early, config)
+            state.grounded = False
+            state.citations = []
+            state.knowledge_available = False
 
-    if db_session and state.organization_id:
-        async with trace_step(trace, "fallback_retrieve_knowledge"):
-            hybrid = HybridRetriever(
-                db_session,
-                retriever=_retriever_for_session(db_session, provider, retriever),
-                keyword_weight=config.hybrid_keyword_weight,
-            )
-            state.prepared_query = QueryPreparer.prepare(state)
-            hits = await hybrid.search(state, organization_id=state.organization_id, top_k=settings.ai_retrieval_top_k)
-            ranked = await Reranker(llm=llm).rank(state.user_message, hits, top_k=settings.ai_final_top_k)
-            state.retrieved_documents = [
-                RetrievedDocument(
-                    document_id=r.hit.document_id,
-                    title=r.hit.title,
-                    content=r.hit.content,
-                    score=r.relevance,
-                    chunk_id=r.hit.chunk_id,
+    skip_retrieve = state.policy_action in _SOFT_ACTIONS or state.policy_action == PolicyAction.ESCALATE
+
+    if not skip_retrieve:
+        async with trace_step(trace, "fallback_detect_language"):
+            state.language = state.language or "en"
+
+        if db_session and state.organization_id:
+            async with trace_step(trace, "fallback_retrieve_knowledge"):
+                hybrid = HybridRetriever(
+                    db_session,
+                    retriever=_retriever_for_session(db_session, llm, retriever),
+                    keyword_weight=config.hybrid_keyword_weight,
                 )
-                for r in ranked
-            ]
-            state.retrieval_score = aggregate_retrieval_score(ranked)
-            gate = RelevanceGate.evaluate(
-                state.retrieved_documents,
-                threshold=config.min_relevance_score,
-                require_knowledge=config.require_knowledge,
-            )
-            state.knowledge_available = gate.passed
-            if not gate.passed:
-                state.escalation_required = True
-                state.escalation_reason = gate.reason
-                state.draft_response = (
-                    "I don't have enough information in our knowledge base to answer that confidently. "
-                    f"Regarding: {state.user_message}"
+                state.prepared_query = QueryPreparer.prepare(state)
+                hits = await hybrid.search(
+                    state, organization_id=state.organization_id, top_k=settings.ai_retrieval_top_k
                 )
-                state.grounded = False
-                state.citations = []
+                ranked = await Reranker(llm=llm).rank(state.user_message, hits, top_k=settings.ai_final_top_k)
+                state.retrieved_documents = [
+                    RetrievedDocument(
+                        document_id=r.hit.document_id,
+                        title=r.hit.title,
+                        content=r.hit.content,
+                        score=r.relevance,
+                        chunk_id=r.hit.chunk_id,
+                    )
+                    for r in ranked
+                ]
+                state.retrieval_score = aggregate_retrieval_score(ranked)
+                gate = RelevanceGate.evaluate(
+                    state.retrieved_documents,
+                    threshold=config.min_relevance_score,
+                    require_knowledge=config.require_knowledge,
+                )
+                state.knowledge_available = gate.passed
+                if not gate.passed:
+                    no_kb = evaluate_no_kb_policy(state, config)
+                    apply_policy_to_state(state, no_kb)
+                    state.grounded = False
+                    state.citations = []
+                    if no_kb.action in _SOFT_ACTIONS:
+                        state.draft_response = render_soft_draft(state, no_kb, config)
+                    else:
+                        state.draft_response = (
+                            "I don't have enough information in our knowledge base to answer that confidently. "
+                            f"Regarding: {state.user_message}"
+                        )
 
-    if state.knowledge_available is not False and not state.draft_response:
-        async with trace_step(trace, "fallback_generate_answer"):
-            if prompt_service is not None:
-                prompt, version_label = await prompt_service.render_support_agent_prompt(state)
-                state.prompt_version = version_label
-            else:
-                from app.modules.ai.prompts.support_agent_v1 import render_generate_prompt
+        if state.knowledge_available is not False and not state.draft_response:
+            async with trace_step(trace, "fallback_generate_answer"):
+                if prompt_service is not None:
+                    prompt, version_label = await prompt_service.render_support_agent_prompt(state)
+                    state.prompt_version = version_label
+                else:
+                    from app.modules.ai.prompts.support_agent_v1 import render_generate_prompt
 
-                prompt = render_generate_prompt(state)
-                state.prompt_version = PROMPT_VERSION
-            answer = await _generate_answer(llm, prompt, state)
-            state.draft_response = answer.answer
-            state.grounded = answer.grounded and bool(state.retrieved_documents)
-            state.citations = [
-                Citation(document_id=d.document_id, title=d.title, chunk_id=d.chunk_id)
-                for d in state.retrieved_documents[:3]
-            ]
-        async with trace_step(trace, "fallback_grounding_check"):
-            validator = GroundingValidator(llm)
-            grounding = await validator.validate(
-                state.draft_response, state.citations, source_contents=state.retrieved_documents
-            )
-            state.grounding_score = grounding.score
-            state.grounded = grounding.grounded and grounding.score >= 0.5
+                    prompt = render_generate_prompt(state)
+                    state.prompt_version = PROMPT_VERSION
+                answer = await _generate_answer(llm, prompt, state)
+                state.draft_response = answer.answer
+                state.grounded = answer.grounded and bool(state.retrieved_documents)
+                state.citations = [
+                    Citation(document_id=d.document_id, title=d.title, chunk_id=d.chunk_id)
+                    for d in state.retrieved_documents[:3]
+                ]
+            async with trace_step(trace, "fallback_grounding_check"):
+                validator = GroundingValidator(llm)
+                grounding = await validator.validate(
+                    state.draft_response, state.citations, source_contents=state.retrieved_documents
+                )
+                state.grounding_score = grounding.score
+                state.grounded = grounding.grounded and grounding.score >= 0.5
 
     async with trace_step(trace, "fallback_calculate_confidence"):
         breakdown = calculate_confidence_breakdown(state, config)
@@ -424,7 +519,7 @@ async def _fallback_support_agent(
 
     async with trace_step(trace, "fallback_decision"):
         state = evaluate_escalation(state, config)
-        if state.decision == AgentDecision.AI_RESOLVE:
+        if state.decision in {AgentDecision.AI_RESOLVE, AgentDecision.SOFT_REPLY}:
             state.final_response = state.draft_response
         elif state.decision == AgentDecision.SUGGEST_ONLY:
             state.final_response = state.draft_response

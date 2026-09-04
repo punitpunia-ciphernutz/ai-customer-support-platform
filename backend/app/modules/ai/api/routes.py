@@ -65,6 +65,8 @@ async def test_ai_agent(
         escalation_required=response.escalation_required,
         escalation_reason=response.escalation_reason,
         decision=response.decision,
+        message_kind=response.message_kind,
+        policy_action=response.policy_action,
     )
 
 

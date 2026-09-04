@@ -40,6 +40,7 @@ class AgentDecisionType(StrEnum):
     AI_RESOLVE = "AI_RESOLVE"
     ESCALATE = "ESCALATE"
     SUGGEST_ONLY = "SUGGEST_ONLY"
+    SOFT_REPLY = "SOFT_REPLY"
 
 
 class SentimentLabel(StrEnum):
@@ -130,6 +131,21 @@ class AIConfig(Base):
     allowed_intents: Mapped[list[str] | None] = mapped_column(JSONB)
     restricted_intents: Mapped[list[str] | None] = mapped_column(JSONB, default=list)
     intent_team_map: Mapped[dict[str, str] | None] = mapped_column(JSONB)
+    response_policy_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    soft_reply_greetings: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    ood_soft_refuse: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    ood_escalates: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    safe_reply_min_kind_confidence: Mapped[float] = mapped_column(Float, default=0.55, nullable=False)
+    assistant_scope_summary: Mapped[str] = mapped_column(
+        String(1000),
+        default=(
+            "password resets, account access, billing questions, and other topics in our help center"
+        ),
+        nullable=False,
+    )
+    assistant_display_name: Mapped[str] = mapped_column(
+        String(128), default="Support Assistant", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

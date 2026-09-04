@@ -7,7 +7,7 @@ import re
 from typing import Protocol
 
 from app.modules.ai.domain.models import AIMode
-from app.modules.ai.domain.schemas import AgentDecision, IntentLabel, SupportAgentState
+from app.modules.ai.domain.schemas import AgentDecision, IntentLabel, PolicyAction, SupportAgentState
 
 
 class EscalationConfig(Protocol):
@@ -28,6 +28,10 @@ HUMAN_REQUEST_PATTERNS = (
     r"\brepresentative\b",
 )
 
+_SOFT_POLICY_ACTIONS = frozenset(
+    {PolicyAction.SAFE_REPLY, PolicyAction.SOFT_REFUSE, PolicyAction.CLARIFY}
+)
+
 
 def detect_human_request(message: str) -> bool:
     lower = message.lower()
@@ -35,6 +39,18 @@ def detect_human_request(message: str) -> bool:
 
 
 def evaluate_escalation(state: SupportAgentState, config: EscalationConfig) -> SupportAgentState:
+    # Response Policy soft path — do not apply OTHER/retrieval escalate reasons
+    if state.policy_allows_ungrounded_send and state.policy_action in _SOFT_POLICY_ACTIONS:
+        if config.mode.value == "SUGGEST":
+            state.escalation_required = False
+            state.decision = AgentDecision.SUGGEST_ONLY
+            state.escalation_reason = None
+            return state
+        state.escalation_required = False
+        state.escalation_reason = None
+        state.decision = AgentDecision.SOFT_REPLY
+        return state
+
     reasons: list[str] = list(state.confidence_breakdown.reasons) if state.confidence_breakdown else []
 
     if state.human_requested or detect_human_request(state.user_message):

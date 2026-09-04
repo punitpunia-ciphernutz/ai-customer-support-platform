@@ -36,6 +36,15 @@ async def get_or_create_ai_config(db: AsyncSession, organization_id: str) -> AIC
         llm_model=normalize_llm_model(get_settings().llm_model),
         restricted_intents=["OTHER"],
         intent_team_map={},
+        response_policy_enabled=True,
+        soft_reply_greetings=True,
+        ood_soft_refuse=True,
+        ood_escalates=False,
+        safe_reply_min_kind_confidence=0.55,
+        assistant_scope_summary=(
+            "password resets, account access, billing questions, and other topics in our help center"
+        ),
+        assistant_display_name="Support Assistant",
     )
     db.add(config)
     await db.flush()

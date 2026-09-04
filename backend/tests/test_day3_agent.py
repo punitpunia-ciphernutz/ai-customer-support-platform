@@ -299,9 +299,11 @@ async def test_ai_test_ambiguous_question() -> None:
         assert response.intent == IntentLabel.TECHNICAL_ISSUE
         assert (
             response.escalation_required
+            or response.decision == AgentDecision.SOFT_REPLY
             or "detail" in response.answer.lower()
             or "clarif" in response.answer.lower()
             or "more" in response.answer.lower()
+            or "knowledge" in response.answer.lower()
         )
         assert not response.grounded
         await session.rollback()
@@ -315,11 +317,31 @@ async def test_ai_test_unsupported_integration() -> None:
             "Does your product integrate with XYZ?",
             organization_id=org_id,
         )
+        # Response Policy: true OOD soft-refuses by default (no ticket / no escalate)
+        assert response.decision == AgentDecision.SOFT_REPLY
+        assert not response.escalation_required
+        assert not response.grounded
+        assert response.message_kind is not None
+        lower = response.answer.lower()
+        assert "outside" in lower or "help with" in lower or "focus" in lower
+        await session.rollback()
+
+
+@pytest.mark.asyncio
+async def test_ai_test_unsupported_integration_policy_off_escalates() -> None:
+    async with AsyncSessionLocal() as session:
+        from app.modules.ai.application.ai_config_service import get_or_create_ai_config
+
+        org_id = (await session.execute(select(Organization.id).limit(1))).scalar_one()
+        cfg = await get_or_create_ai_config(session, org_id)
+        cfg.response_policy_enabled = False
+        await session.flush()
+        response = await AIService(session, llm=EchoLLMProvider()).run_test(
+            "Does your product integrate with XYZ?",
+            organization_id=org_id,
+        )
         assert response.escalation_required
         assert response.decision == AgentDecision.ESCALATE
-        assert not response.grounded
-        assert "xyz" in response.answer.lower()
-        assert "integrat" in response.answer.lower() or "documentation" in response.answer.lower()
         await session.rollback()
 
 

@@ -33,6 +33,15 @@ class RuntimeAIConfig:
     intent_team_map: dict[str, str] | None
     organization_id: str
     channel: str | None = None
+    response_policy_enabled: bool = True
+    soft_reply_greetings: bool = True
+    ood_soft_refuse: bool = True
+    ood_escalates: bool = False
+    safe_reply_min_kind_confidence: float = 0.55
+    assistant_scope_summary: str = (
+        "password resets, account access, billing questions, and other topics in our help center"
+    )
+    assistant_display_name: str = "Support Assistant"
 
     @classmethod
     async def resolve(
@@ -84,4 +93,14 @@ class RuntimeAIConfig:
             intent_team_map=base.intent_team_map,
             organization_id=base.organization_id,
             channel=channel,
+            response_policy_enabled=getattr(base, "response_policy_enabled", True),
+            soft_reply_greetings=getattr(base, "soft_reply_greetings", True),
+            ood_soft_refuse=getattr(base, "ood_soft_refuse", True),
+            ood_escalates=getattr(base, "ood_escalates", False),
+            safe_reply_min_kind_confidence=getattr(base, "safe_reply_min_kind_confidence", 0.55),
+            assistant_scope_summary=getattr(base, "assistant_scope_summary", None)
+            or (
+                "password resets, account access, billing questions, and other topics in our help center"
+            ),
+            assistant_display_name=getattr(base, "assistant_display_name", None) or "Support Assistant",
         )

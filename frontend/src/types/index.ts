@@ -28,7 +28,7 @@ export type IntentLabel =
   | "OTHER";
 export type AIRunType = "CLASSIFICATION" | "GENERATION" | "SUMMARY" | "RETRIEVAL" | "AGENT";
 export type AIRunStatus = "PENDING" | "RUNNING" | "SUCCEEDED" | "COMPLETED" | "FAILED";
-export type AgentDecision = "AI_RESOLVE" | "ESCALATE" | "SUGGEST_ONLY";
+export type AgentDecision = "AI_RESOLVE" | "ESCALATE" | "SUGGEST_ONLY" | "SOFT_REPLY";
 
 export type Role = { id: string; name: RoleName; permissions: string[] };
 
@@ -192,6 +192,13 @@ export type AIConfig = {
   restricted_intents: string[] | null;
   intent_team_map: Record<string, string> | null;
   channel_overrides?: { channel: string; mode: AIMode | null }[];
+  response_policy_enabled?: boolean;
+  soft_reply_greetings?: boolean;
+  ood_soft_refuse?: boolean;
+  ood_escalates?: boolean;
+  safe_reply_min_kind_confidence?: number;
+  assistant_scope_summary?: string;
+  assistant_display_name?: string;
 };
 
 export type AIRunSummary = {
@@ -238,6 +245,8 @@ export type AITestResponse = {
   escalation_required: boolean;
   escalation_reason: string | null;
   decision: AgentDecision;
+  message_kind?: string | null;
+  policy_action?: string | null;
 };
 
 export const INTENT_LABELS: IntentLabel[] = [

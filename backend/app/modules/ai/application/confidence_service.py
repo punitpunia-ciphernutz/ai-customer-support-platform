@@ -43,6 +43,8 @@ def _policy_score(state: SupportAgentState, config: ConfidenceConfig | None) -> 
         return 0.0
     if state.ai_control_mode == "HUMAN_CONTROL":
         return 0.0
+    if state.policy_allows_ungrounded_send:
+        return 1.0
     return 1.0
 
 
@@ -82,12 +84,16 @@ def calculate_confidence_breakdown(
     threshold = config.escalation_threshold if config else 0.85
     auto_threshold = config.auto_reply_threshold if config else 0.85
 
-    if not state.knowledge_available:
-        reasons.append("No sufficiently relevant knowledge found")
-    if components.retrieval < (config.min_relevance_score if config else 0.35):
-        reasons.append("Knowledge relevance below threshold")
-    if not state.grounded or components.grounding < 0.5:
-        reasons.append("Answer not grounded in retrieved knowledge")
+    if state.policy_allows_ungrounded_send:
+        # Soft replies intentionally skip KB grounding — don't flag as escalate reasons
+        pass
+    else:
+        if not state.knowledge_available:
+            reasons.append("No sufficiently relevant knowledge found")
+        if components.retrieval < (config.min_relevance_score if config else 0.35):
+            reasons.append("Knowledge relevance below threshold")
+        if not state.grounded or components.grounding < 0.5:
+            reasons.append("Answer not grounded in retrieved knowledge")
     if state.human_requested:
         reasons.append("Customer requested human agent")
     if state.intent and config and config.restricted_intents:
@@ -97,10 +103,14 @@ def calculate_confidence_breakdown(
         reasons.append("Policy blocked auto-reply")
 
     decision = AgentDecision.AI_RESOLVE
-    if reasons or final < auto_threshold:
+    if state.policy_allows_ungrounded_send and not state.human_requested:
+        decision = AgentDecision.SOFT_REPLY
+    elif reasons or final < auto_threshold:
         decision = AgentDecision.ESCALATE
     if config and getattr(config.mode, "value", config.mode) == "SUGGEST":
         decision = AgentDecision.SUGGEST_ONLY if not reasons else AgentDecision.ESCALATE
+        if state.policy_allows_ungrounded_send and not state.human_requested:
+            decision = AgentDecision.SUGGEST_ONLY
 
     return ConfidenceBreakdown(
         final=final,

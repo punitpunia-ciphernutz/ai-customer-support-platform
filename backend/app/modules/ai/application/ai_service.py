@@ -158,6 +158,8 @@ class AIService:
                 citations=final_state.citations,
                 decision=final_state.decision or AgentDecision.ESCALATE,
                 ai_run_id=run.id,
+                message_kind=final_state.message_kind,
+                policy_action=final_state.policy_action,
             )
 
             if persist_side_effects:
@@ -206,6 +208,8 @@ class AIService:
             escalation_reason=final_state.escalation_reason,
             citations=final_state.citations,
             decision=final_state.decision or AgentDecision.ESCALATE,
+            message_kind=final_state.message_kind,
+            policy_action=final_state.policy_action,
         )
 
     async def process_customer_message(self, message_id: str) -> AIRun | None:
@@ -310,7 +314,9 @@ class AIService:
             return
 
         if mode == AIMode.DRAFT_ONLY:
-            if response.decision == AgentDecision.AI_RESOLVE and response.grounded:
+            if response.decision == AgentDecision.SOFT_REPLY:
+                await self._save_ai_reply(state, response, run)
+            elif response.decision == AgentDecision.AI_RESOLVE and response.grounded:
                 await self._save_ai_reply(state, response, run)
             else:
                 await EscalationService(self.db).create_from_ai_run(
@@ -322,7 +328,9 @@ class AIService:
                 )
             return
 
-        if response.decision == AgentDecision.AI_RESOLVE and mode == AIMode.AUTO_REPLY:
+        if response.decision == AgentDecision.SOFT_REPLY and mode == AIMode.AUTO_REPLY:
+            await self._save_ai_reply(state, response, run)
+        elif response.decision == AgentDecision.AI_RESOLVE and mode == AIMode.AUTO_REPLY:
             if not response.grounded:
                 await EscalationService(self.db).create_from_ai_run(
                     state,

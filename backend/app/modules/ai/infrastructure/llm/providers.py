@@ -107,10 +107,14 @@ class EchoLLMProvider(LLMProvider):
         result: BaseModel
 
         if schema is AIClassification:
+            from app.modules.ai.domain.schemas import MessageKind
+
             intent = IntentLabel.OTHER
             requires_human = False
             language = "es" if any(w in lower for w in ("cómo", "contraseña", "restablecer")) else "en"
             sentiment = "neutral"
+            message_kind = MessageKind.SUPPORT_REQUEST
+            message_kind_confidence = 0.9
             if any(w in lower for w in ("third time", "furious", "terrible", "awful", "unacceptable", "!!!")):
                 sentiment = "angry"
             elif any(w in lower for w in ("cannot", "can't", "isn't working", "not work")):
@@ -118,30 +122,67 @@ class EchoLLMProvider(LLMProvider):
             if any(w in lower for w in ("human", "representative", "real person", "speak to")):
                 intent = IntentLabel.OTHER
                 requires_human = True
+                message_kind = MessageKind.HUMAN_REQUEST
+            elif any(
+                w in lower
+                for w in ("who are you", "what are you", "are you a bot", "are you ai", "are you an ai")
+            ):
+                intent = IntentLabel.GENERAL_QUESTION
+                message_kind = MessageKind.IDENTITY
             elif any(w in lower for w in ("login", "password", "account", "access", "sign in", "contraseña")):
                 intent = IntentLabel.ACCOUNT_ACCESS
+                message_kind = MessageKind.SUPPORT_REQUEST
             elif any(w in lower for w in ("bill", "invoice", "charge", "payment", "billing plan")):
                 intent = IntentLabel.BILLING
+                message_kind = MessageKind.SUPPORT_REQUEST
             elif any(w in lower for w in ("bug", "crash", "error", "broken")):
                 intent = IntentLabel.BUG_REPORT
+                message_kind = MessageKind.SUPPORT_REQUEST
             elif any(w in lower for w in ("refund",)):
                 intent = IntentLabel.REFUND
                 requires_human = True
+                message_kind = MessageKind.SUPPORT_REQUEST
             elif any(w in lower for w in ("cancel",)):
                 intent = IntentLabel.CANCELLATION
                 requires_human = True
+                message_kind = MessageKind.SUPPORT_REQUEST
             elif any(w in lower for w in ("feature", "request")):
                 intent = IntentLabel.FEATURE_REQUEST
-            elif any(w in lower for w in ("how", "what", "where", "?")):
-                intent = IntentLabel.GENERAL_QUESTION
-            elif any(w in lower for w in ("not work", "isn't working", "issue", "problem", "technical")):
-                intent = IntentLabel.TECHNICAL_ISSUE
+                message_kind = MessageKind.SUPPORT_REQUEST
             elif "integrat" in lower and "xyz" in lower:
                 intent = IntentLabel.GENERAL_QUESTION
+                message_kind = MessageKind.OUT_OF_DOMAIN
+            elif any(w in lower for w in ("quantum", "physics", "joke", "weather")):
+                intent = IntentLabel.GENERAL_QUESTION
+                message_kind = MessageKind.OUT_OF_DOMAIN
             elif any(w in lower for w in ("asdfghjkl", "gibberish", "random")):
                 intent = IntentLabel.OTHER
-            elif lower.strip() == "help":
+                message_kind = MessageKind.UNCLEAR
+                message_kind_confidence = 0.7
+            elif lower.strip() in {"help", "help?", "???", "?"}:
                 intent = IntentLabel.GENERAL_QUESTION
+                message_kind = MessageKind.UNCLEAR
+                message_kind_confidence = 0.75
+            elif any(w in lower for w in ("thanks", "thank you", "thx", "cool", "ok", "okay")):
+                intent = IntentLabel.GENERAL_QUESTION
+                message_kind = MessageKind.SMALL_TALK
+            elif any(w in lower for w in ("how", "what", "where", "?")):
+                intent = IntentLabel.GENERAL_QUESTION
+                message_kind = MessageKind.SUPPORT_REQUEST
+            elif any(w in lower for w in ("not work", "isn't working", "issue", "problem", "technical")):
+                intent = IntentLabel.TECHNICAL_ISSUE
+                message_kind = MessageKind.SUPPORT_REQUEST
+            else:
+                # Short hello-like prompts without a task
+                stripped = lower.strip().strip("!.")
+                if stripped in {"hello", "hi", "hey", "good morning", "good afternoon", "good evening"} or (
+                    len(stripped.split()) <= 3 and any(g in stripped for g in ("hello", "hi", "hey"))
+                ):
+                    intent = IntentLabel.GENERAL_QUESTION
+                    message_kind = MessageKind.GREETING
+                elif intent == IntentLabel.OTHER:
+                    message_kind = MessageKind.UNCLEAR
+                    message_kind_confidence = 0.6
             result = schema.model_validate(
                 {
                     "intent": intent,
@@ -149,6 +190,8 @@ class EchoLLMProvider(LLMProvider):
                     "sentiment": sentiment,
                     "confidence": 0.94 if intent != IntentLabel.OTHER else 0.72,
                     "requires_human": requires_human,
+                    "message_kind": message_kind,
+                    "message_kind_confidence": message_kind_confidence,
                 }
             )
 
@@ -278,10 +321,31 @@ class GeminiLLMProvider(LLMProvider):
     async def structured_output(self, prompt: str, schema: type[T], **kwargs: Any) -> T:
         from google.genai import types
 
-        system = (
-            "You are a support intent classifier. "
-            "Respond with JSON matching the provided schema only."
-        )
+        from app.modules.ai.domain.schemas import AIClassification
+
+        if schema is AIClassification:
+            system = (
+                "You are a support message understanding classifier. "
+                "Return JSON matching the schema only. "
+                "Set intent to the support topic (billing, account access, etc.). "
+                "Set message_kind to the conversational act: "
+                "GREETING (hello/hi with no task), IDENTITY (who/what are you), "
+                "SMALL_TALK (thanks/ok without a task), "
+                "SUPPORT_REQUEST (real help need — even if the message starts with hi), "
+                "HUMAN_REQUEST (ask for a live agent), "
+                "OUT_OF_DOMAIN (clearly outside product support), "
+                "UNCLEAR (too vague to act). "
+                "Prefer SUPPORT_REQUEST when a real task is present. "
+                "Prefer HUMAN_REQUEST when the customer asks for a human. "
+                "Missing knowledge is decided later — do not use OUT_OF_DOMAIN merely because "
+                "you are unsure whether docs exist. "
+                "message_kind_confidence is 0-1 for the kind label."
+            )
+        else:
+            system = (
+                "You are a support assistant. "
+                "Respond with JSON matching the provided schema only."
+            )
         client = self._client()
         response = await client.aio.models.generate_content(
             model=self.model,

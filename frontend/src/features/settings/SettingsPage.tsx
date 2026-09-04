@@ -118,6 +118,12 @@ type SettingsDraft = {
   allowed_intents: string[] | null;
   restricted_intents: string[];
   intent_team_map: Record<string, string>;
+  response_policy_enabled: boolean;
+  soft_reply_greetings: boolean;
+  ood_soft_refuse: boolean;
+  ood_escalates: boolean;
+  assistant_scope_summary: string;
+  assistant_display_name: string;
 };
 
 function emptyTeamMap(): Record<string, string> {
@@ -138,6 +144,14 @@ function draftFromConfig(config: AIConfig): SettingsDraft {
     allowed_intents: config.allowed_intents,
     restricted_intents: config.restricted_intents ?? [],
     intent_team_map: { ...emptyTeamMap(), ...(config.intent_team_map ?? {}) },
+    response_policy_enabled: config.response_policy_enabled ?? true,
+    soft_reply_greetings: config.soft_reply_greetings ?? true,
+    ood_soft_refuse: config.ood_soft_refuse ?? true,
+    ood_escalates: config.ood_escalates ?? false,
+    assistant_scope_summary:
+      config.assistant_scope_summary ??
+      "password resets, account access, billing questions, and other topics in our help center",
+    assistant_display_name: config.assistant_display_name ?? "Support Assistant",
   };
 }
 
@@ -159,6 +173,12 @@ function payloadFromDraft(draft: SettingsDraft): Partial<AIConfig> {
     allowed_intents: draft.allowed_intents,
     restricted_intents: draft.restricted_intents,
     intent_team_map,
+    response_policy_enabled: draft.response_policy_enabled,
+    soft_reply_greetings: draft.soft_reply_greetings,
+    ood_soft_refuse: draft.ood_soft_refuse,
+    ood_escalates: draft.ood_escalates,
+    assistant_scope_summary: draft.assistant_scope_summary,
+    assistant_display_name: draft.assistant_display_name,
   };
 }
 
@@ -434,6 +454,79 @@ export function SettingsPage() {
                 Multilingual responses
               </label>
             </div>
+
+            <h3 className="section-title" style={{ fontSize: "0.95rem", marginTop: "0.5rem" }}>
+              Response Policy
+            </h3>
+            <p className="form-hint mb-4">
+              Soft-reply greetings and soft-refuse out-of-domain / no-KB questions without tickets.
+              Turn off to restore legacy escalate-only behavior for those cases.
+            </p>
+            <div className="grid-2 mb-4">
+              <label className="flex items-center gap-2" style={{ cursor: "pointer", fontSize: "0.875rem" }}>
+                <input
+                  type="checkbox"
+                  checked={draft.response_policy_enabled}
+                  onChange={(e) => updateDraft({ response_policy_enabled: e.target.checked })}
+                  disabled={patchConfig.isPending}
+                />
+                Response policy enabled
+              </label>
+              <label className="flex items-center gap-2" style={{ cursor: "pointer", fontSize: "0.875rem" }}>
+                <input
+                  type="checkbox"
+                  checked={draft.soft_reply_greetings}
+                  onChange={(e) => updateDraft({ soft_reply_greetings: e.target.checked })}
+                  disabled={patchConfig.isPending || !draft.response_policy_enabled}
+                />
+                Soft-reply greetings / identity
+              </label>
+              <label className="flex items-center gap-2" style={{ cursor: "pointer", fontSize: "0.875rem" }}>
+                <input
+                  type="checkbox"
+                  checked={draft.ood_soft_refuse}
+                  onChange={(e) => updateDraft({ ood_soft_refuse: e.target.checked })}
+                  disabled={patchConfig.isPending || !draft.response_policy_enabled}
+                />
+                Soft-refuse OOD / no-KB (no ticket)
+              </label>
+              <label className="flex items-center gap-2" style={{ cursor: "pointer", fontSize: "0.875rem" }}>
+                <input
+                  type="checkbox"
+                  checked={draft.ood_escalates}
+                  onChange={(e) => updateDraft({ ood_escalates: e.target.checked })}
+                  disabled={patchConfig.isPending || !draft.response_policy_enabled}
+                />
+                Escalate OOD / no-KB to ticket
+              </label>
+            </div>
+            <div className="grid-2 mb-4">
+              <div className="form-field">
+                <label className="form-label" htmlFor="assistant-name">
+                  Assistant display name
+                </label>
+                <input
+                  id="assistant-name"
+                  className="form-input"
+                  value={draft.assistant_display_name}
+                  onChange={(e) => updateDraft({ assistant_display_name: e.target.value })}
+                  disabled={patchConfig.isPending}
+                />
+              </div>
+              <div className="form-field">
+                <label className="form-label" htmlFor="assistant-scope">
+                  Scope summary (soft replies)
+                </label>
+                <input
+                  id="assistant-scope"
+                  className="form-input"
+                  value={draft.assistant_scope_summary}
+                  onChange={(e) => updateDraft({ assistant_scope_summary: e.target.value })}
+                  disabled={patchConfig.isPending}
+                />
+              </div>
+            </div>
+
             <div className="form-field" style={{ maxWidth: 280 }}>
               <label className="form-label" htmlFor="ai-response-timeout">
                 AI response timeout ({draft.ai_response_timeout_seconds}s)
@@ -599,6 +692,8 @@ export function SettingsPage() {
               <span className="text-sm text-muted">
                 {testResult.intent.replace(/_/g, " ")} · {formatPercent(testResult.confidence)}
                 {testResult.grounded ? " · Grounded" : ""}
+                {testResult.message_kind ? ` · ${testResult.message_kind.replace(/_/g, " ")}` : ""}
+                {testResult.policy_action ? ` · Policy ${testResult.policy_action.replace(/_/g, " ")}` : ""}
               </span>
             </div>
             <p style={{ margin: 0, lineHeight: 1.6 }}>{testResult.answer}</p>

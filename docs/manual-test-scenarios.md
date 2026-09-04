@@ -173,6 +173,43 @@ curl -s -X POST "$API/knowledge/search" \
 
 ---
 
+## 2b. Response Policy (greetings / OOD / no-KB)
+
+**Pre:** AI enabled · WEB_CHAT Autopilot · `response_policy_enabled` = ON (default)
+
+### TC-RP-01 — Greeting soft reply
+
+1. `/chat` → send `Hello`
+2. Expect customer-visible AI welcome (scope mentioned); **no** AI escalation ticket
+
+### TC-RP-02 — Identity soft reply
+
+1. Send `Who are you?`
+2. Expect assistant identity + scope; no ticket
+
+### TC-RP-03 — True OOD soft refuse
+
+1. Send `Does Acme integrate with XYZ ERP version 99?`
+2. Expect soft refuse (“outside what I can help” / scope); no ticket when `ood_soft_refuse` ON
+
+### TC-RP-04 — Support + no KB ≠ OOD
+
+1. Ask an in-domain support question with no matching docs (or remove FAQ temporarily)
+2. Expect insufficient-knowledge soft refuse (not “out of domain” wording); kind remains support path
+
+### TC-RP-05 — FAQ regression
+
+1. `How do I reset my password?` with FAQ ingested
+2. Expect grounded Autopilot reply (unchanged)
+
+### TC-RP-06 — Kill switch
+
+1. Settings → uncheck **Response policy enabled** → Save
+2. Send `Hello` → legacy escalate / ticket path
+3. Re-enable policy when done
+
+---
+
 ## 3. Web chat — Autopilot + knowledge
 
 ### TC-WC-01 — Autopilot WITH knowledge (grounded reply)
