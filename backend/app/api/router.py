@@ -1,5 +1,8 @@
+from typing import Any
+
 from fastapi import APIRouter
 
+from app.infrastructure.health import collect_health
 from app.modules.agents.router import router as agents_router
 from app.modules.ai.api.routes import router as ai_router
 from app.modules.attachments.router import router as attachments_router
@@ -22,8 +25,8 @@ api_router = APIRouter()
 
 
 @api_router.get("/health")
-async def api_health() -> dict[str, str]:
-    return {"status": "ok"}
+async def api_health() -> dict[str, Any]:
+    return await collect_health()
 
 
 api_router.include_router(auth_router)

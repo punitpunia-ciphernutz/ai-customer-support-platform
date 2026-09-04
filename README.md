@@ -27,3 +27,4 @@ Frontend: React · TypeScript · Vite · TanStack Query · React Hook Form · Zo
 - [Day 1+2 final audit](docs/day1-day2-final-audit.md)
 - [Progress](docs/progress.md)
 - [Run guide](docs/run-guide.md)
+- [Manual test scenarios](docs/manual-test-scenarios.md) — webchat, email curl, KB with/without, AI modes

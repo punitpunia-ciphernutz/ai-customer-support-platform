@@ -13,6 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.api.router import api_router
 from app.config import get_settings
 from app.infrastructure.events import event_bus
+from app.infrastructure.health import collect_health
 from app.infrastructure.logging import bind_request_context, configure_logging
 from app.modules.automation.application.event_handler import register_automation_handlers
 from app.modules.inbox.ws import ensure_listener_started, router as ws_router
@@ -75,8 +76,8 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
     @app.get("/health")
-    async def root_health() -> dict[str, str]:
-        return {"status": "ok"}
+    async def root_health() -> dict[str, object]:
+        return await collect_health()
 
     app.include_router(api_router, prefix="/api/v1")
     app.include_router(ws_router)

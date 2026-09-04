@@ -1,5 +1,7 @@
 # Run guide — local development
 
+For a full **manual QA checklist** (webchat, email curl, knowledge with/without, AI modes, automations), see [`manual-test-scenarios.md`](manual-test-scenarios.md).
+
 ## Prerequisites
 
 - Docker + Docker Compose
