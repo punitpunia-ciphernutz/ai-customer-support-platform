@@ -20,6 +20,7 @@ from app.modules.ai.application.response_policy import (
 )
 from app.modules.ai.application.runtime_config import RuntimeAIConfig
 from app.modules.ai.application.trace_helper import TraceCollector, trace_step
+from app.modules.ai.domain.models import SentimentLabel
 from app.modules.ai.domain.schemas import (
     AgentDecision,
     Citation,
@@ -100,7 +101,7 @@ async def run_support_agent_graph(
                 "intent_confidence": classification.confidence,
                 "message_kind": kind,
                 "message_kind_confidence": classification.message_kind_confidence,
-                "sentiment": _normalize_sentiment(classification.sentiment, s.user_message),
+                "sentiment": _normalize_sentiment(classification.sentiment),
                 "language": classification.language,
                 "human_requested": human_requested or classification.requires_human,
             }
@@ -426,7 +427,7 @@ async def _fallback_support_agent(
         state.intent_confidence = classification.confidence
         state.message_kind = classification.message_kind or MessageKind.SUPPORT_REQUEST
         state.message_kind_confidence = classification.message_kind_confidence
-        state.sentiment = _normalize_sentiment(classification.sentiment, state.user_message)
+        state.sentiment = _normalize_sentiment(classification.sentiment)
         state.language = classification.language
         state.human_requested = state.human_requested or classification.requires_human
 
@@ -555,13 +556,12 @@ async def timed_support_agent(
 GRAPH_VERSION = PROMPT_VERSION
 
 
-def _normalize_sentiment(raw: str, message: str) -> str:
-    lower = message.lower()
-    angry_words = ("third time", "furious", "terrible", "awful", "!!!", "unacceptable")
-    if any(w in lower for w in angry_words) or raw.lower() in {"angry", "frustrated"}:
-        return "ANGRY"
-    if raw.lower() in {"negative", "frustrated", "upset"}:
-        return "NEGATIVE"
-    if raw.lower() in {"positive", "happy", "great"}:
-        return "POSITIVE"
-    return "NEUTRAL"
+def _normalize_sentiment(raw: str | SentimentLabel | None) -> str:
+    """Validate/sanitize LLM sentiment only — never re-classify from message text."""
+    if raw is None:
+        return SentimentLabel.NEUTRAL.value
+    value = str(raw).strip().upper()
+    try:
+        return SentimentLabel(value).value
+    except ValueError:
+        return SentimentLabel.NEUTRAL.value

@@ -57,7 +57,17 @@ class SoftRefuseKind(StrEnum):
 class AIClassification(BaseModel):
     intent: IntentLabel
     language: str = Field(default="en", min_length=2, max_length=16)
-    sentiment: str = Field(default="neutral")
+    sentiment: SentimentLabel = Field(
+        default=SentimentLabel.NEUTRAL,
+        description=(
+            "Overall customer emotion from meaning, context, and intensity — not keyword matching. "
+            "POSITIVE: thanks, praise, satisfaction. "
+            "NEUTRAL: factual or no strong emotion. "
+            "NEGATIVE: dissatisfaction or mild frustration without hostility. "
+            "ANGRY: strong anger, hostility, aggression, or threats "
+            "(even without words like angry/mad)."
+        ),
+    )
     confidence: float = Field(ge=0.0, le=1.0)
     requires_human: bool = False
     message_kind: MessageKind = MessageKind.SUPPORT_REQUEST
@@ -237,7 +247,7 @@ class SupportAgentState(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
     support_confidence: float = 0.0
     confidence_breakdown: ConfidenceBreakdown | None = None
-    sentiment: str = "neutral"
+    sentiment: str = SentimentLabel.NEUTRAL.value
     escalation_required: bool = False
     escalation_reason: str | None = None
     escalation_summary: str | None = None

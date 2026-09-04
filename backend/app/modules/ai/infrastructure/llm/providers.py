@@ -29,6 +29,75 @@ def available_llm_model_options() -> list[dict[str, str]]:
     return [{"id": model_id, "label": label} for model_id, label in AVAILABLE_LLM_MODELS]
 
 
+def _echo_sentiment(lower: str) -> str:
+    """Heuristic stand-in for LLM sentiment (Echo only). Uses intensity/meaning cues."""
+    from app.modules.ai.domain.models import SentimentLabel
+
+    angry_cues = (
+        "third time",
+        "furious",
+        "terrible",
+        "awful",
+        "unacceptable",
+        "!!!",
+        "angry",
+        "pissed",
+        "rage",
+        "hostile",
+        "ridiculous",
+        "worst",
+        "useless",
+        "fix your",
+        "i'm done",
+        "im done",
+        "sick of",
+        "hate this",
+        "hate your",
+        "sue you",
+        "lawyer",
+        "report you",
+        "get angry",
+        "makes me mad",
+        "i am mad",
+        "i'm mad",
+    )
+    negative_cues = (
+        "cannot",
+        "can't",
+        "isn't working",
+        "not work",
+        "doesn't work",
+        "does not work",
+        "disappointed",
+        "unhappy",
+        "not happy",
+        "frustrated",
+        "upset",
+        "too much",
+        "annoyed",
+        "problem",
+        "issue",
+    )
+    positive_cues = (
+        "thanks",
+        "thank you",
+        "thx",
+        "great",
+        "awesome",
+        "perfect",
+        "appreciate",
+        "helpful",
+        "love it",
+    )
+    if any(c in lower for c in angry_cues):
+        return SentimentLabel.ANGRY.value
+    if any(c in lower for c in negative_cues):
+        return SentimentLabel.NEGATIVE.value
+    if any(c in lower for c in positive_cues):
+        return SentimentLabel.POSITIVE.value
+    return SentimentLabel.NEUTRAL.value
+
+
 def normalize_llm_model(model: str | None) -> str:
     """Return a supported model id, falling back to the env/default model."""
     settings = get_settings()
@@ -112,13 +181,9 @@ class EchoLLMProvider(LLMProvider):
             intent = IntentLabel.OTHER
             requires_human = False
             language = "es" if any(w in lower for w in ("cómo", "contraseña", "restablecer")) else "en"
-            sentiment = "neutral"
+            sentiment = _echo_sentiment(lower)
             message_kind = MessageKind.SUPPORT_REQUEST
             message_kind_confidence = 0.9
-            if any(w in lower for w in ("third time", "furious", "terrible", "awful", "unacceptable", "!!!")):
-                sentiment = "angry"
-            elif any(w in lower for w in ("cannot", "can't", "isn't working", "not work")):
-                sentiment = "frustrated"
             if any(w in lower for w in ("human", "representative", "real person", "speak to")):
                 intent = IntentLabel.OTHER
                 requires_human = True
@@ -339,7 +404,17 @@ class GeminiLLMProvider(LLMProvider):
                 "Prefer HUMAN_REQUEST when the customer asks for a human. "
                 "Missing knowledge is decided later — do not use OUT_OF_DOMAIN merely because "
                 "you are unsure whether docs exist. "
-                "message_kind_confidence is 0-1 for the kind label."
+                "message_kind_confidence is 0-1 for the kind label. "
+                "Set sentiment from overall meaning, context, and emotional intensity — "
+                "not from specific keywords alone. Use only: "
+                "POSITIVE (thanks, praise, satisfaction), "
+                "NEUTRAL (factual or no strong emotion), "
+                "NEGATIVE (dissatisfaction or mild frustration without hostility; "
+                "e.g. 'this isn't working', 'I'm disappointed'), "
+                "ANGRY (strong anger, hostility, aggression, or threats — even without "
+                "words like angry/mad; e.g. 'this is ridiculous, fix your mess', "
+                "'I'm done with this service', 'now I get angry'). "
+                "Prefer ANGRY over NEGATIVE when intensity is high or the tone is hostile."
             )
         else:
             system = (

@@ -522,8 +522,11 @@ Metrics: intent accuracy, grounding rate, escalation accuracy, answer quality (c
 
 Labels: `POSITIVE`, `NEUTRAL`, `NEGATIVE`, `ANGRY`
 
+- **Source of truth:** LLM classification (`AIClassification.sentiment` enum) from overall meaning, context, and emotional intensity — not keyword lists
+- `NEGATIVE` = dissatisfaction / mild frustration; `ANGRY` = strong anger, hostility, aggression, or threats (even without words like “angry” / “mad”)
+- Graph normalizer only validates/sanitizes LLM output (invalid → `NEUTRAL`); does not re-detect from message text
 - Primary use: routing (priority, team) — **not** personality changes
-- Extend existing classification output (Day 3 stub in `LLMProvider`)
+- Echo stub mirrors the same four labels for offline tests
 
 ### Tasks
 
@@ -531,7 +534,7 @@ Labels: `POSITIVE`, `NEUTRAL`, `NEGATIVE`, `ANGRY`
 - [x] Generation prompt: reply in `state.language`
 - [x] Sentiment on `AIRun` + handoff package
 - [x] Tests: Spanish password question → Spanish response; angry message → HIGH priority ticket
-
+- [x] LLM-driven sentiment enum + Gemini definitions; keyword override removed from normalizer
 ---
 
 ## Phase 14 — Frontend: AI settings, suggestion UX & diagnostics

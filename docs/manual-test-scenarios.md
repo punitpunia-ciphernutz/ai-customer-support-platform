@@ -618,8 +618,10 @@ Use this as a coverage grid. Run after TC-KB-01.
 ### TC-AU-01 — Angry customer
 
 **Steps**
-1. Web chat or email with angry language, e.g.  
-   `This is ridiculous! Your service is terrible and I'm furious about this charge!`
+1. Web chat or email with angry tone (intensity / hostility — not only keyword lists), e.g.  
+   `This is ridiculous — fix your mess. I'm done waiting.`  
+   or `now i get angry`  
+   (Also still OK: `This is the third time I've contacted you!`)
 2. Check Automations executions → **Angry Customers**
 3. Check priority / manager notify
 

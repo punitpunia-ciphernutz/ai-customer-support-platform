@@ -72,7 +72,7 @@ Agent online status and schedule for routing.
 | `grounding_score` | float | Post-generation validation |
 | `confidence_components` | JSONB | Explainable breakdown |
 | `decision` | string | `AI_RESOLVE`, `ESCALATE`, `SUGGEST_ONLY` |
-| `language` / `sentiment` | string | Routing signals |
+| `language` / `sentiment` | string | Routing signals. Sentiment is LLM-classified: `POSITIVE`, `NEUTRAL`, `NEGATIVE`, `ANGRY` (validated on ingest; invalid → `NEUTRAL`). |
 | `estimated_cost_usd` | float | Token cost estimate |
 | `trace` | JSONB | Operational step trace |
 
