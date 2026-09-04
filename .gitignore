@@ -40,3 +40,8 @@ Thumbs.db
 celerybeat-schedule
 celerybeat-schedule.db
 celerybeat.pid
+
+.agents/
+
+.agents/
+

@@ -25,7 +25,7 @@ import {
   StatCard,
   TableSearchBar,
 } from "@/components/ui";
-import { IconPlus, IconTicket } from "@/components/ui/icons";
+import { IconChevronLeft, IconPlus, IconTicket } from "@/components/ui/icons";
 import { cn } from "@/utils/cn";
 
 type StatusFilter = "all" | TicketStatus;
@@ -178,228 +178,282 @@ export function TicketsPage() {
   });
 
   return (
-    <div className="page-full">
-      <div className="page-top">
-        <PageHeader
-          title="Tickets"
-          description="Track escalations and manual support cases. Assign agents, update status, and resolve issues."
-          action={
-            <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
-              <IconPlus size={16} />
-              New Ticket
-            </button>
-          }
-        />
-
-        <div className="stats-grid" style={{ marginBottom: "1rem" }}>
-          <StatCard icon={<IconTicket size={20} />} value={tickets.data?.length ?? 0} label="Total Tickets" color="green" />
-          <StatCard icon={<IconTicket size={20} />} value={openCount} label="Open" sublabel="Awaiting action" color="orange" />
-          <StatCard icon={<IconTicket size={20} />} value={inProgressCount} label="In Progress" color="purple" />
-          <StatCard icon={<IconTicket size={20} />} value={resolvedCount} label="Resolved" color="blue" />
-        </div>
-
-        {saveMsg && <Alert type="success">{saveMsg}</Alert>}
-        {saveErr && <Alert type="error">{saveErr}</Alert>}
-
-        <div className="filter-pills mb-4">
-          {(["team", "mine", "unassigned", ...(isOrgAdmin ? (["all"] as TicketView[]) : [])] as TicketView[]).map((v) => (
-            <button
-              key={v}
-              type="button"
-              className={cn("filter-pill", ticketView === v && "active")}
-              onClick={() => setTicketView(v)}
-            >
-              {v === "team" ? "Team" : v === "mine" ? "Mine" : v === "unassigned" ? "Unassigned" : "All"}
-            </button>
-          ))}
-        </div>
-        <div className="filter-pills mb-4">
-          <button
-            type="button"
-            className={cn("filter-pill", statusFilter === "all" && "active")}
-            onClick={() => setStatusFilter("all")}
-          >
-            Status: All ({tickets.data?.length ?? 0})
-          </button>
-          {TICKET_STATUSES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={cn("filter-pill", statusFilter === s && "active")}
-              onClick={() => setStatusFilter(s)}
-            >
-              {s.replace(/_/g, " ")}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="split-layout" style={{ borderTop: "1px solid var(--border)" }}>
-        <section className="split-list">
-          <TableSearchBar
-            value={search}
-            placeholder="Search tickets…"
-            onChange={setSearch}
+    <div className={selected ? "page-full" : "page-scroll"}>
+      {!selected ? (
+        <>
+          <PageHeader
+            title="Tickets"
+            description="Track escalations and manual support cases. Assign agents, update status, and resolve issues."
+            action={
+              <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
+                <IconPlus size={16} />
+                New Ticket
+              </button>
+            }
           />
-          {tickets.isLoading && <LoadingState message="Loading tickets…" />}
-          {tickets.isError && (
-            <div style={{ padding: "1rem" }}>
-              <Alert type="error">
-                {tickets.error instanceof ApiError ? tickets.error.message : "Failed to load tickets."}
-              </Alert>
-            </div>
-          )}
-          {!tickets.isLoading && !filtered.length && (
-            <EmptyState
-              message={
-                search.trim()
-                  ? "No tickets match your search."
-                  : "No tickets yet. AI escalations create tickets automatically, or create one manually."
-              }
-            />
-          )}
-          {filtered.map((t) => (
+
+          <div className="stats-grid">
+            <StatCard icon={<IconTicket size={20} />} value={tickets.data?.length ?? 0} label="Total Tickets" color="green" />
+            <StatCard icon={<IconTicket size={20} />} value={openCount} label="Open" sublabel="Awaiting action" color="orange" />
+            <StatCard icon={<IconTicket size={20} />} value={inProgressCount} label="In Progress" color="purple" />
+            <StatCard icon={<IconTicket size={20} />} value={resolvedCount} label="Resolved" color="blue" />
+          </div>
+
+          {saveMsg && <Alert type="success">{saveMsg}</Alert>}
+          {saveErr && <Alert type="error">{saveErr}</Alert>}
+
+          <div className="filter-pills mb-4">
+            {(["team", "mine", "unassigned", ...(isOrgAdmin ? (["all"] as TicketView[]) : [])] as TicketView[]).map((v) => (
+              <button
+                key={v}
+                type="button"
+                className={cn("filter-pill", ticketView === v && "active")}
+                onClick={() => setTicketView(v)}
+              >
+                {v === "team" ? "Team" : v === "mine" ? "Mine" : v === "unassigned" ? "Unassigned" : "All"}
+              </button>
+            ))}
+          </div>
+          <div className="filter-pills mb-4">
             <button
-              key={t.id}
               type="button"
-              className={cn("list-item", selectedId === t.id && "selected")}
+              className={cn("filter-pill", statusFilter === "all" && "active")}
+              onClick={() => setStatusFilter("all")}
+            >
+              Status: All ({tickets.data?.length ?? 0})
+            </button>
+            {TICKET_STATUSES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={cn("filter-pill", statusFilter === s && "active")}
+                onClick={() => setStatusFilter(s)}
+              >
+                {s.replace(/_/g, " ")}
+              </button>
+            ))}
+          </div>
+
+          <div className="table-wrap">
+            <TableSearchBar
+              value={search}
+              placeholder="Search tickets…"
+              onChange={setSearch}
+            />
+            {tickets.isLoading && <LoadingState message="Loading tickets…" />}
+            {tickets.isError && (
+              <div style={{ padding: "1rem 1.25rem" }}>
+                <Alert type="error">
+                  {tickets.error instanceof ApiError ? tickets.error.message : "Failed to load tickets."}
+                </Alert>
+              </div>
+            )}
+            {!tickets.isLoading && !filtered.length && (
+              <EmptyState
+                message={
+                  search.trim()
+                    ? "No tickets match your search."
+                    : "No tickets yet. AI escalations create tickets automatically, or create one manually."
+                }
+              />
+            )}
+            {!tickets.isLoading && filtered.length > 0 && (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Customer</th>
+                    <th>Status</th>
+                    <th>Priority</th>
+                    <th>Team</th>
+                    <th>Assignee</th>
+                    <th>Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((t) => (
+                    <tr
+                      key={t.id}
+                      className="table-row-clickable"
+                      onClick={() => {
+                        setSelectedId(t.id);
+                        setSaveMsg(null);
+                        setSaveErr(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedId(t.id);
+                          setSaveMsg(null);
+                          setSaveErr(null);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="link"
+                      aria-label={`Open ticket for ${customerName(t.conversation_id)}`}
+                    >
+                      <td>
+                        <div className="cell-with-avatar">
+                          <Avatar name={customerName(t.conversation_id)} size="sm" />
+                          <span className="cell-primary">{customerName(t.conversation_id)}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={statusClass(t.status.toLowerCase())}>
+                          {t.status.replace(/_/g, " ")}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={statusClass(t.priority.toLowerCase())}>{t.priority}</span>
+                      </td>
+                      <td>{teamName(t.assigned_team_id)}</td>
+                      <td>{userName(t.assigned_user_id)}</td>
+                      <td className="text-sm text-muted">{formatRelative(t.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <div
+            style={{
+              padding: "0.875rem 1.25rem",
+              borderBottom: "1px solid var(--border)",
+              background: "var(--bg-card)",
+            }}
+          >
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
               onClick={() => {
-                setSelectedId(t.id);
+                setSelectedId(null);
                 setSaveMsg(null);
                 setSaveErr(null);
               }}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.5rem" }}>
-                <span className="list-item-title">{customerName(t.conversation_id)}</span>
-                <span className={statusClass(t.status.toLowerCase())}>{t.status.replace(/_/g, " ")}</span>
-              </div>
-              <div className="list-item-meta">
-                <span className={statusClass(t.priority.toLowerCase())}>{t.priority}</span>
-                <span>{teamName(t.assigned_team_id)}</span>
-                <span>{formatRelative(t.created_at)}</span>
-              </div>
+              <IconChevronLeft size={16} />
+              Back to tickets
             </button>
-          ))}
-        </section>
+          </div>
+          <div className="page-scroll" style={{ flex: 1 }}>
+            {saveMsg && <Alert type="success">{saveMsg}</Alert>}
+            {saveErr && <Alert type="error">{saveErr}</Alert>}
 
-        <section className="split-detail">
-          {!selected && <EmptyState message="Select a ticket to view details and update status." />}
-          {selected && (
-            <div className="page-scroll">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", marginBottom: "1.5rem" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                  <Avatar name={customerName(selected.conversation_id)} />
-                  <div>
-                    <h2 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 700 }}>
-                      {customerName(selected.conversation_id)}
-                    </h2>
-                    <div className="flex gap-2 mt-4" style={{ marginTop: "0.375rem" }}>
-                      <span className={statusClass(selected.status.toLowerCase())}>{selected.status.replace(/_/g, " ")}</span>
-                      <span className={statusClass(selected.priority.toLowerCase())}>{selected.priority}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <dl className="meta-grid mb-6">
-                <div><dt>Ticket ID</dt><dd><code>{selected.id}</code></dd></div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", marginBottom: "1.5rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <Avatar name={customerName(selected.conversation_id)} />
                 <div>
-                  <dt>Conversation</dt>
-                  <dd>
-                    <Link to={`/?c=${selected.conversation_id}`}>Open in Inbox</Link>
-                  </dd>
-                </div>
-                <div><dt>Created</dt><dd>{formatDate(selected.created_at)}</dd></div>
-                <div><dt>Resolved</dt><dd>{formatDate(selected.resolved_at)}</dd></div>
-                <div><dt>Closed</dt><dd>{formatDate(selected.closed_at)}</dd></div>
-                <div><dt>Assignee</dt><dd>{userName(selected.assigned_user_id)}</dd></div>
-                <div><dt>Team</dt><dd>{teamName(selected.assigned_team_id)}</dd></div>
-              </dl>
-
-              <div className="card">
-                <h3 className="section-title">Update Ticket</h3>
-                <div className="grid-2" style={{ marginBottom: "1rem" }}>
-                  <div className="form-field">
-                    <label className="form-label" htmlFor="edit-status">Status</label>
-                    <select
-                      id="edit-status"
-                      className="form-select"
-                      value={selected.status}
-                      onChange={(e) => patchTicket.mutate({ status: e.target.value as TicketStatus })}
-                      disabled={patchTicket.isPending}
-                    >
-                      {TICKET_STATUSES.map((s) => (
-                        <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
-                      ))}
-                    </select>
+                  <h2 style={{ margin: 0, fontSize: "1.125rem", fontWeight: 700 }}>
+                    {customerName(selected.conversation_id)}
+                  </h2>
+                  <div className="flex gap-2" style={{ marginTop: "0.375rem" }}>
+                    <span className={statusClass(selected.status.toLowerCase())}>{selected.status.replace(/_/g, " ")}</span>
+                    <span className={statusClass(selected.priority.toLowerCase())}>{selected.priority}</span>
                   </div>
-                  <div className="form-field">
-                    <label className="form-label" htmlFor="edit-priority">Priority</label>
-                    <select
-                      id="edit-priority"
-                      className="form-select"
-                      value={selected.priority}
-                      onChange={(e) => patchTicket.mutate({ priority: e.target.value as Priority })}
-                      disabled={patchTicket.isPending}
-                    >
-                      {PRIORITIES.map((p) => (
-                        <option key={p} value={p}>{p}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-field">
-                    <label className="form-label" htmlFor="edit-assignee">Assignee</label>
-                    <select
-                      id="edit-assignee"
-                      className="form-select"
-                      value={selected.assigned_user_id ?? ""}
-                      onChange={(e) => patchTicket.mutate({ assigned_user_id: e.target.value || null })}
-                      disabled={patchTicket.isPending}
-                    >
-                      <option value="">Unassigned</option>
-                      {(users.data ?? []).map((u) => (
-                        <option key={u.id} value={u.id}>{u.full_name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-field">
-                    <label className="form-label" htmlFor="edit-team">Team</label>
-                    <select
-                      id="edit-team"
-                      className="form-select"
-                      value={selected.assigned_team_id ?? ""}
-                      onChange={(e) => patchTicket.mutate({ assigned_team_id: e.target.value || null })}
-                      disabled={patchTicket.isPending}
-                    >
-                      <option value="">No team</option>
-                      {(teams.data ?? []).map((t) => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  {selected.status !== "RESOLVED" && selected.status !== "CLOSED" && (
-                    <button type="button" className="btn btn-secondary btn-sm" disabled={patchTicket.isPending} onClick={() => patchTicket.mutate({ status: "RESOLVED" })}>
-                      Mark Resolved
-                    </button>
-                  )}
-                  {selected.status !== "CLOSED" && (
-                    <button type="button" className="btn btn-danger btn-sm" disabled={patchTicket.isPending} onClick={() => patchTicket.mutate({ status: "CLOSED" })}>
-                      Close Ticket
-                    </button>
-                  )}
-                  {selected.status === "CLOSED" && (
-                    <button type="button" className="btn btn-secondary btn-sm" disabled={patchTicket.isPending} onClick={() => patchTicket.mutate({ status: "OPEN" })}>
-                      Reopen
-                    </button>
-                  )}
                 </div>
               </div>
             </div>
-          )}
-        </section>
-      </div>
+
+            <dl className="meta-grid mb-6">
+              <div><dt>Ticket ID</dt><dd><code>{selected.id}</code></dd></div>
+              <div>
+                <dt>Conversation</dt>
+                <dd>
+                  <Link to={`/?c=${selected.conversation_id}`}>Open in Inbox</Link>
+                </dd>
+              </div>
+              <div><dt>Created</dt><dd>{formatDate(selected.created_at)}</dd></div>
+              <div><dt>Resolved</dt><dd>{formatDate(selected.resolved_at)}</dd></div>
+              <div><dt>Closed</dt><dd>{formatDate(selected.closed_at)}</dd></div>
+              <div><dt>Assignee</dt><dd>{userName(selected.assigned_user_id)}</dd></div>
+              <div><dt>Team</dt><dd>{teamName(selected.assigned_team_id)}</dd></div>
+            </dl>
+
+            <div className="card">
+              <h3 className="section-title">Update Ticket</h3>
+              <div className="grid-2" style={{ marginBottom: "1rem" }}>
+                <div className="form-field">
+                  <label className="form-label" htmlFor="edit-status">Status</label>
+                  <select
+                    id="edit-status"
+                    className="form-select"
+                    value={selected.status}
+                    onChange={(e) => patchTicket.mutate({ status: e.target.value as TicketStatus })}
+                    disabled={patchTicket.isPending}
+                  >
+                    {TICKET_STATUSES.map((s) => (
+                      <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label className="form-label" htmlFor="edit-priority">Priority</label>
+                  <select
+                    id="edit-priority"
+                    className="form-select"
+                    value={selected.priority}
+                    onChange={(e) => patchTicket.mutate({ priority: e.target.value as Priority })}
+                    disabled={patchTicket.isPending}
+                  >
+                    {PRIORITIES.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label className="form-label" htmlFor="edit-assignee">Assignee</label>
+                  <select
+                    id="edit-assignee"
+                    className="form-select"
+                    value={selected.assigned_user_id ?? ""}
+                    onChange={(e) => patchTicket.mutate({ assigned_user_id: e.target.value || null })}
+                    disabled={patchTicket.isPending}
+                  >
+                    <option value="">Unassigned</option>
+                    {(users.data ?? []).map((u) => (
+                      <option key={u.id} value={u.id}>{u.full_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-field">
+                  <label className="form-label" htmlFor="edit-team">Team</label>
+                  <select
+                    id="edit-team"
+                    className="form-select"
+                    value={selected.assigned_team_id ?? ""}
+                    onChange={(e) => patchTicket.mutate({ assigned_team_id: e.target.value || null })}
+                    disabled={patchTicket.isPending}
+                  >
+                    <option value="">No team</option>
+                    {(teams.data ?? []).map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                {selected.status !== "RESOLVED" && selected.status !== "CLOSED" && (
+                  <button type="button" className="btn btn-secondary btn-sm" disabled={patchTicket.isPending} onClick={() => patchTicket.mutate({ status: "RESOLVED" })}>
+                    Mark Resolved
+                  </button>
+                )}
+                {selected.status !== "CLOSED" && (
+                  <button type="button" className="btn btn-danger btn-sm" disabled={patchTicket.isPending} onClick={() => patchTicket.mutate({ status: "CLOSED" })}>
+                    Close Ticket
+                  </button>
+                )}
+                {selected.status === "CLOSED" && (
+                  <button type="button" className="btn btn-secondary btn-sm" disabled={patchTicket.isPending} onClick={() => patchTicket.mutate({ status: "OPEN" })}>
+                    Reopen
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {showCreate && (
         <Modal
@@ -474,3 +528,4 @@ export function TicketsPage() {
     </div>
   );
 }
+
