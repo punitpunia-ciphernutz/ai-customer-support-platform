@@ -231,7 +231,7 @@ async def test_escalation_sets_conversation_team() -> None:
             user,
             ConversationCreate(customer_id=customer.id, channel="WEB_CHAT"),
         )
-        assert conv.assigned_team_id is None
+        assert conv.assigned_team_id is not None  # default Support for Team inbox
         state = SupportAgentState(
             conversation_id=conv.id,
             organization_id=org_id,

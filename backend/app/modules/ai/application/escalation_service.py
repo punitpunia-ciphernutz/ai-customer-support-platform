@@ -156,8 +156,8 @@ class EscalationService:
         await self.db.flush()
         await self.db.refresh(ticket)
 
-        # Keep inbox Team view aligned with ticket routing
-        if team_id and conv.assigned_team_id is None:
+        # Keep inbox Team view aligned with ticket routing (overwrite default Support)
+        if team_id and conv.assigned_team_id != team_id:
             conv.assigned_team_id = team_id
             await self.db.flush()
 

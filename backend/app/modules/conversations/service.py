@@ -373,6 +373,7 @@ class ConversationService:
             )
             self.db.add(conversation)
             await self.db.flush()
+            await self._assign_default_team(conversation)
             self.db.add(
                 Participant(
                     conversation_id=conversation.id,
@@ -647,6 +648,7 @@ class ConversationService:
         )
         self.db.add(conversation)
         await self.db.flush()
+        await self._assign_default_team(conversation)
         self.db.add(
             Participant(
                 conversation_id=conversation.id,
@@ -798,6 +800,23 @@ class ConversationService:
         if new_suggestion is None:
             raise ValueError("Failed to regenerate suggestion")
         return new_suggestion
+
+    async def _assign_default_team(self, conversation: Conversation) -> None:
+        """Put new conversations on Support so they appear in agents' Team inbox."""
+        if conversation.assigned_team_id:
+            return
+        from app.infrastructure.database.models import Team
+
+        team = await self.db.scalar(
+            select(Team).where(
+                Team.organization_id == conversation.organization_id,
+                Team.name.ilike("Support"),
+            )
+        )
+        if team is None:
+            return
+        conversation.assigned_team_id = team.id
+        await self.db.flush()
 
     async def _get_customer(self, org_id: str, customer_id: str) -> Customer:
         result = await self.db.execute(

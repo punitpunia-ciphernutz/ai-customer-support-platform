@@ -11,7 +11,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 
-from app.infrastructure.database.models import Conversation, Customer, Message, Organization
+from app.infrastructure.database.models import Conversation, Customer, Message, Organization, Team
 from app.infrastructure.database.session import AsyncSessionLocal
 from app.main import app
 from app.modules.conversations.service import ConversationService
@@ -57,6 +57,14 @@ async def test_inbound_email_creates_conversation_and_message() -> None:
         assert conv is not None
         assert conv.channel.value == "EMAIL"
         assert conv.subject == "Password Reset"
+        assert conv.assigned_team_id is not None
+        from app.infrastructure.database.models import Team
+
+        support = await session.scalar(
+            select(Team).where(Team.organization_id == org_id, Team.name == "Support")
+        )
+        assert support is not None
+        assert conv.assigned_team_id == support.id
         msg = await session.get(Message, data["message_id"])
         assert msg is not None
         assert msg.content == "I cannot reset my password."
