@@ -39,7 +39,7 @@ function ColorField({
               onChange(e.target.value);
             }
           }}
-          placeholder="#0F766E"
+          placeholder="#3B66F5"
           spellCheck={false}
         />
       </div>
@@ -65,7 +65,7 @@ export function WidgetForm({
   const [offline, setOffline] = useState(widget.offline_message ?? "");
   const [requireName, setRequireName] = useState(widget.require_name);
   const [requireEmail, setRequireEmail] = useState(widget.require_email);
-  const [primary, setPrimary] = useState(widget.appearance?.primary_color ?? "#0F766E");
+  const [primary, setPrimary] = useState(widget.appearance?.primary_color ?? "#3B66F5");
   const [textColor, setTextColor] = useState(widget.appearance?.text_color ?? "#FFFFFF");
   const [position, setPosition] = useState(widget.appearance?.launcher_position ?? "bottom-right");
   const [launcherText, setLauncherText] = useState(widget.appearance?.launcher_text ?? "Chat");
@@ -75,7 +75,7 @@ export function WidgetForm({
       className="form-stack"
       onSubmit={(e) => {
         e.preventDefault();
-        const normalizedPrimary = /^#[0-9a-fA-F]{6}$/.test(primary) ? primary : "#0F766E";
+        const normalizedPrimary = /^#[0-9a-fA-F]{6}$/.test(primary) ? primary : "#3B66F5";
         const normalizedText = /^#[0-9a-fA-F]{6}$/.test(textColor) ? textColor : "#FFFFFF";
         onSave({
           name: name.trim(),
@@ -182,7 +182,7 @@ export function WidgetForm({
         <div className="widget-appearance-preview" aria-hidden>
           <div
             className="widget-appearance-preview-chip"
-            style={{ background: /^#[0-9a-fA-F]{6}$/.test(primary) ? primary : "#0F766E", color: /^#[0-9a-fA-F]{6}$/.test(textColor) ? textColor : "#fff" }}
+            style={{ background: /^#[0-9a-fA-F]{6}$/.test(primary) ? primary : "#3B66F5", color: /^#[0-9a-fA-F]{6}$/.test(textColor) ? textColor : "#fff" }}
           >
             {launcherText.trim() || "Chat"}
           </div>

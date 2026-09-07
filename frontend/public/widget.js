@@ -29,7 +29,7 @@
   var srcUrl = new URL(script.src);
   var origin = srcUrl.origin;
   var position = script.getAttribute("data-position") || "bottom-right";
-  var primary = script.getAttribute("data-primary-color") || "#0F766E";
+  var primary = script.getAttribute("data-primary-color") || "#3B66F5";
   var textColor = script.getAttribute("data-text-color") || "#FFFFFF";
   var launcherText = script.getAttribute("data-launcher-text") || "Chat";
   var zIndex = 999999;

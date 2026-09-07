@@ -38,7 +38,7 @@ export function WidgetFrameApp() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const checkedRef = useRef<Set<string>>(new Set());
 
-  const primary = config?.appearance?.primary_color ?? "#0F766E";
+  const primary = config?.appearance?.primary_color ?? "#3B66F5";
   const textColor = config?.appearance?.text_color ?? "#FFFFFF";
   const radius = config?.appearance?.border_radius_px ?? 16;
 

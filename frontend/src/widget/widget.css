@@ -25,7 +25,7 @@ body,
   justify-content: space-between;
   gap: 0.75rem;
   padding: 1rem 1.05rem;
-  background: var(--widget-primary, #0f766e);
+  background: var(--widget-primary, #3B66F5);
   color: var(--widget-text, #ffffff);
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
 }
@@ -97,7 +97,7 @@ body,
 
 .widget-frame .message-bubble.customer {
   align-self: flex-end;
-  background: var(--widget-primary, #0f766e);
+  background: var(--widget-primary, #3B66F5);
   color: var(--widget-text, #ffffff);
   border: none;
   border-bottom-right-radius: 5px;
@@ -194,15 +194,15 @@ body,
 
 .widget-frame-composer input:focus,
 .widget-frame-prechat input:focus {
-  border-color: var(--widget-primary, #0f766e);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--widget-primary, #0f766e) 22%, transparent);
+  border-color: var(--widget-primary, #3B66F5);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--widget-primary, #3B66F5) 22%, transparent);
 }
 
 .widget-frame-send {
   border: 0;
   border-radius: 12px;
   padding: 0.7rem 1rem;
-  background: var(--widget-primary, #0f766e);
+  background: var(--widget-primary, #3B66F5);
   color: var(--widget-text, #ffffff);
   font-weight: 650;
   font-size: 0.9rem;

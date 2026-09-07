@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from app.infrastructure.database.models import WidgetStatus
 
 DEFAULT_APPEARANCE: dict[str, Any] = {
-    "primary_color": "#0F766E",
+    "primary_color": "#3B66F5",
     "text_color": "#FFFFFF",
     "launcher_position": "bottom-right",
     "launcher_text": "Chat with us",
@@ -19,7 +19,7 @@ DEFAULT_APPEARANCE: dict[str, Any] = {
 
 
 class WidgetAppearance(BaseModel):
-    primary_color: str = "#0F766E"
+    primary_color: str = "#3B66F5"
     text_color: str = "#FFFFFF"
     launcher_position: str = "bottom-right"
     launcher_text: str = "Chat with us"
