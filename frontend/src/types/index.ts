@@ -114,6 +114,43 @@ export type Conversation = {
   updated_at: string;
 };
 
+export type AIConfidenceComponents = {
+  intent?: number;
+  retrieval?: number;
+  grounding?: number;
+  context?: number;
+  policy?: number;
+  response_validation?: number;
+};
+
+export type AIConfidenceBreakdown = {
+  final?: number;
+  components?: AIConfidenceComponents;
+  decision?: AgentDecision | string;
+  reasons?: string[];
+};
+
+export type AIHandoffPackage = {
+  customer_name?: string;
+  customer_company?: string | null;
+  issue_summary?: string;
+  escalation_summary?: string;
+  intent?: string;
+  ai_confidence?: number;
+  support_confidence?: number;
+  confidence_breakdown?: AIConfidenceBreakdown | null;
+  knowledge_searched?: string[];
+  citations?: { document_id?: string; title: string; chunk_id?: string | null }[];
+  what_ai_tried?: string;
+  why_escalated?: string;
+  escalation_reason?: string;
+  recommended_action?: string;
+  sentiment?: string | null;
+  language?: string | null;
+  decision?: AgentDecision | string | null;
+  grounding_score?: number | null;
+};
+
 export type Message = {
   id: string;
   conversation_id: string;
@@ -145,6 +182,7 @@ export type Message = {
     estimated_cost_usd?: number;
     suggestion?: boolean;
     suggestion_status?: string;
+    handoff_package?: AIHandoffPackage;
   };
 };
 
@@ -156,6 +194,9 @@ export type Ticket = {
   priority: Priority;
   assigned_user_id: string | null;
   assigned_team_id: string | null;
+  title?: string | null;
+  source?: string | null;
+  description?: string | null;
   created_at: string;
   resolved_at: string | null;
   closed_at: string | null;

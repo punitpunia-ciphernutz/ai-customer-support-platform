@@ -7,6 +7,7 @@ import { formatDate, formatRelative, statusClass } from "@/utils/format";
 import type {
   Conversation,
   Customer,
+  Message,
   Priority,
   Ticket,
   TicketStatus,
@@ -27,6 +28,11 @@ import {
 } from "@/components/ui";
 import { IconChevronLeft, IconPlus, IconTicket } from "@/components/ui/icons";
 import { cn } from "@/utils/cn";
+import {
+  AiSummaryDrawer,
+  findTicketHandoff,
+  handoffHasContent,
+} from "@/features/tickets/AiSummaryDrawer";
 
 type StatusFilter = "all" | TicketStatus;
 type TicketView = "team" | "mine" | "unassigned" | "all";
@@ -51,6 +57,7 @@ export function TicketsPage() {
   });
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [showAiSummary, setShowAiSummary] = useState(false);
 
   const tickets = useQuery({
     queryKey: ["tickets", ticketView],
@@ -124,6 +131,21 @@ export function TicketsPage() {
     () => tickets.data?.find((t) => t.id === selectedId) ?? null,
     [tickets.data, selectedId]
   );
+
+  const ticketMessages = useQuery({
+    queryKey: ["conversations", selected?.conversation_id, "messages"],
+    queryFn: () => api<Message[]>(`/conversations/${selected!.conversation_id}/messages`),
+    enabled: Boolean(selected?.conversation_id),
+  });
+
+  const handoffPackage = useMemo(() => {
+    if (!selected || !ticketMessages.data) return null;
+    return findTicketHandoff(ticketMessages.data, selected.id);
+  }, [selected, ticketMessages.data]);
+
+  useEffect(() => {
+    setShowAiSummary(false);
+  }, [selectedId]);
 
   const openCount = (tickets.data ?? []).filter((t) => t.status === "OPEN").length;
   const inProgressCount = (tickets.data ?? []).filter((t) => t.status === "IN_PROGRESS").length;
@@ -354,6 +376,15 @@ export function TicketsPage() {
                   </div>
                 </div>
               </div>
+              {handoffHasContent(handoffPackage) && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowAiSummary(true)}
+                >
+                  AI Summary
+                </button>
+              )}
             </div>
 
             <dl className="meta-grid mb-6">
@@ -524,6 +555,10 @@ export function TicketsPage() {
             </select>
           </div>
         </Modal>
+      )}
+
+      {showAiSummary && handoffPackage && (
+        <AiSummaryDrawer package={handoffPackage} onClose={() => setShowAiSummary(false)} />
       )}
     </div>
   );
