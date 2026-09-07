@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/services/api/client";
 import { Alert, EmptyState, LoadingState, PageHeader, StatCard } from "@/components/ui";
-import { IconAutomation, IconPlus, IconSearch } from "@/components/ui/icons";
+import { IconAutomation, IconPlus, IconSearch, IconTrash } from "@/components/ui/icons";
 import { cn } from "@/utils/cn";
 import type { AutomationSummary } from "@/types";
 import { automationStats, formatTriggerLabel, summarizeConditions } from "./utils";
@@ -29,6 +29,15 @@ export function AutomationsPage() {
       void qc.invalidateQueries({ queryKey: ["automations"] });
     },
     onError: (e) => setActionError(e instanceof ApiError ? e.message : "Failed to update automation."),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => api(`/automations/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      setActionError(null);
+      void qc.invalidateQueries({ queryKey: ["automations"] });
+    },
+    onError: (e) => setActionError(e instanceof ApiError ? e.message : "Failed to delete automation."),
   });
 
   const filtered = useMemo(() => {
@@ -168,10 +177,21 @@ export function AutomationsPage() {
                         <button
                           type="button"
                           className="btn btn-secondary btn-sm"
-                          disabled={toggle.isPending}
+                          disabled={toggle.isPending || remove.isPending}
                           onClick={() => toggle.mutate({ id: row.id, enabled: !row.enabled })}
                         >
                           {row.enabled ? "Disable" : "Enable"}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm btn-icon"
+                          disabled={remove.isPending}
+                          onClick={() => {
+                            if (confirm(`Delete automation "${row.name}"?`)) remove.mutate(row.id);
+                          }}
+                          aria-label="Delete automation"
+                        >
+                          <IconTrash size={14} />
                         </button>
                       </div>
                     </td>

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.automation.domain.models import Automation, AutomationExecution
+from app.modules.automation.domain.models import Automation, AutomationExecution, AutomationExecutionStep
 from app.modules.automation.domain.schemas import AutomationCreate, AutomationUpdate
 
 
@@ -70,10 +70,26 @@ class AutomationService:
         return automation
 
     async def delete(self, automation: Automation) -> None:
+        # Executions/steps have no ON DELETE CASCADE — remove dependents first.
+        execution_ids = (
+            await self.db.execute(
+                select(AutomationExecution.id).where(AutomationExecution.automation_id == automation.id)
+            )
+        ).scalars().all()
+        if execution_ids:
+            await self.db.execute(
+                delete(AutomationExecutionStep).where(AutomationExecutionStep.execution_id.in_(execution_ids))
+            )
+            await self.db.execute(
+                delete(AutomationExecution).where(AutomationExecution.id.in_(execution_ids))
+            )
         await self.db.delete(automation)
         await self.db.flush()
 
     async def set_enabled(self, automation: Automation, enabled: bool) -> Automation:
         automation.enabled = enabled
         await self.db.flush()
+        # Refresh so server-side onupdate columns (updated_at) are loaded;
+        # otherwise _automation_out hits MissingGreenlet on lazy load.
+        await self.db.refresh(automation)
         return automation
