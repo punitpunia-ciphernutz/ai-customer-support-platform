@@ -1,139 +1,88 @@
 # Progress — AI Customer Support Platform
 
-Last updated: 2026-09-03 (Notifications UI + team-scoped tickets)
+Last updated: 2026-09-07
 
 ## Status summary
 
-**Day 1–4:** Complete (re-audited 2026-09-01).  
-**Day 5:** **Complete** — Email channel, omnichannel foundation, unified inbox.  
-**Day 6:** **Complete** — Automation engine, routing, business hours, SLA, notifications, missed chat; audit fixes applied.  
-**Teams management:** **Complete** — membership CRUD API + Teams page (assign/remove, edit/delete, membership visibility).  
-**User admin RBAC:** **Complete** — create users, change roles, activate/deactivate, reset password (hierarchy-guarded).  
-**Notifications UI + team tickets:** **Complete** — AppShell bell; tickets/inbox scoped by team membership.
+| Area | Status |
+|------|--------|
+| Day 1–4 (core, KB, AI agent, reliability) | Complete |
+| Day 5 (email, omnichannel, attachments) | Complete |
+| Day 6 (automations, SLA, notifications, missed chat) | Complete |
+| Teams + user admin RBAC | Complete |
+| Notifications UI + team-scoped tickets | Complete |
+| Auto-assignment (round-robin / ensure assignee) | Complete |
+| Response policy (soft greetings / OOD / no-KB) | Complete |
+| Embeddable chat widgets | Complete |
+| Attachment HTTP download (inbox) | Complete |
 
 LLM: **Google Gemini** when `GEMINI_API_KEY` is set; otherwise **Echo/heuristic** + offline lexical embeddings.
 
 ---
 
-## Notifications UI + team-scoped tickets (2026-09-03)
+## Recent (2026-09-07)
 
-| Area | Work |
-|------|------|
-| Notify UI | AppShell bell — list, mark read / read-all, WS refresh, deep-link to inbox/ticket |
-| API | `POST /notifications/read-all`; notification `metadata` in list payload |
-| Tickets | `GET /tickets?view=mine\|team\|all\|unassigned` + hard ACL; All = OWNER/ADMIN only |
-| Inbox | Team filter pill; agents/managers default to Team view |
-| Escalation | Sets `conversation.assigned_team_id` with ticket team |
-| Tests | `tests/test_notify_and_ticket_scope.py` |
+### Attachment download
 
----
+- `GET /api/v1/attachments/{id}/download` streams file bytes (auth required).
+- Inbox attachment chips fetch with bearer token (no `file://` links).
+- Docker Compose volume `attachment_uploads` → `/tmp/support-attachments` so blobs survive container restarts.
 
-## User admin RBAC (2026-09-03)
+### Embeddable widgets
 
-| Area | Work |
-|------|------|
-| Perms | `users.write` for OWNER, ADMIN, **MANAGER**; role hierarchy helpers |
-| API | `GET/POST/PATCH /users`, `GET /roles`, `POST /users/{id}/reset-password` |
-| Rules | Cannot assign above own rank; cannot deactivate self; cannot demote last OWNER |
-| UI | Teams → Organization Members: Add User, Edit role, Activate/Deactivate, Reset password |
-| Tests | `tests/test_users_api.py` |
+- Settings → Chat Widgets; seeded Demo Website Widget (`localhost` allowlisted).
+- Visitor identity in browser `localStorage` (`sp_widget_<public_id>`) — per visitor, not per website.
+- Fixture: http://localhost:5173/widget-fixture.html
 
-Managers may staff **MANAGER / AGENT / READ_ONLY** only. OWNER/ADMIN may assign any role.
+### Response policy (Settings → AI)
+
+- Soft-reply greetings/identity skip KB (canned intro).
+- Soft-refuse when OOD / no relevant KB (unless escalate toggles say otherwise).
+- `require_knowledge` applies to support questions that reach retrieval — not to soft greeting replies.
 
 ---
 
-## Teams management (2026-09-03)
+## Feature highlights
 
-| Area | Work |
-|------|------|
-| API | `GET/PATCH/DELETE /teams/{id}`, membership add/remove, `member_count` + user `teams` enrichment |
-| UI | Teams page: member counts, detail modal (edit/add/remove/delete), Teams column on org members |
-| Tests | `tests/test_teams_api.py` |
-
----
-
-## Day 6 — Completed (including audit fix pass)
-
-| Phase | Work |
-|-------|------|
-| 1 | Migration `0008_day6_automation` + models + seed |
-| 2 | `BusinessHoursService` — timezone, holidays |
-| 3 | `AssignmentService` — round-robin; ONLINE/AWAY/OFFLINE |
-| 4 | `NotificationService` — in-app + email stub + team name resolution |
-| 5 | Automation engine — conditions, **16/16 actions**, execution logs, audit |
-| 6 | Event bus → automation handler + loop depth contextvar |
-| 7 | **SLA wired** — create/priority/reply/close + breach beat job |
-| 8 | Missed chat — Celery ETA on conversation create + beat safety net |
-| 9 | AI signals; default automations; `intent_team_map` cleared |
-| 10 | REST APIs — automations, business-hours, notifications, availability |
-| 11 | Frontend — list/create/edit automations, business hours + holidays, execution steps |
-| 12 | **25 tests** across 15 files; acceptance (billing, angry, missed chat) |
-
-### Audit fix highlights
-
-- NOTIFY_TEAM resolves team **names** (Route Billing no longer FAILED)
-- Manager user + Billing team member seeded
-- SLA timers start on billing → HIGH priority path
-- Automation create/edit UI at `/automations/new`
-
-## Day 6 tests
-
-```bash
-docker compose exec backend alembic upgrade head
-docker compose exec backend python -m app.scripts.seed
-docker compose exec backend pytest -q \
-  tests/test_day6_phase1_models.py \
-  tests/test_day6_conditions.py \
-  tests/test_day6_business_hours.py \
-  tests/test_day6_assignment_round_robin.py \
-  tests/test_day6_acceptance.py \
-  tests/test_day6_actions.py \
-  tests/test_day6_execution_logs.py \
-  tests/test_day6_loop_protection.py \
-  tests/test_day6_idempotency.py \
-  tests/test_day6_availability.py \
-  tests/test_day6_missed_chat_delayed.py \
-  tests/test_day6_sla_timers.py \
-  tests/test_day6_notifications.py \
-  tests/test_day6_event_integration.py \
-  tests/test_day6_automation_api.py
-```
-
-**Result:** **25/25 passed** (2026-09-02 post-fix)
+| Area | Notes |
+|------|-------|
+| Inbox | Unified WEB_CHAT + EMAIL; takeover / return-to-AI |
+| Knowledge | Sources, PDF/URL ingest, hybrid retrieval + grounding |
+| Email | Mock inbound webhook; outbound send; attachments stored + downloadable |
+| Automations | Conditions/actions, billing routing, execution logs |
+| Business hours / SLA | Settings UI; beat jobs for breach + missed chat |
+| Teams / users | Membership CRUD; hierarchy-guarded user admin |
 
 ---
-
-## Documentation
-
-- Day 6 plan: [`docs/day6-implementation-plan.md`](day6-implementation-plan.md)
-- Day 6 audit: [`docs/day6-audit.md`](day6-audit.md) — **COMPLETE**
-- Day 6 schema: [`docs/database/day6-schema.md`](database/day6-schema.md)
-- Run guide: [`docs/run-guide.md`](run-guide.md)
 
 ## Default credentials
 
-Shared password for all demo users: **`agent123!`**
+Shared password: **`agent123!`**
 
-| Role | Name | Email | Password | Teams | Use for |
-|------|------|-------|----------|-------|---------|
-| OWNER | Ava Owner | `owner@example.com` | `agent123!` | — | Full admin / settings |
-| ADMIN | Noah Admin | `admin@example.com` | `agent123!` | — | Org admin |
-| MANAGER | Maya Manager | `manager@example.com` | `agent123!` | Support | Teams + user admin (agents/managers), escalations |
-| AGENT | Alex Agent | `agent@example.com` | `agent123!` | Support, Billing | Primary inbox agent |
-| AGENT | Priya Shah | `priya.support@example.com` | `agent123!` | Support | Round-robin / Team inbox |
-| AGENT | Jordan Lee | `jordan.billing@example.com` | `agent123!` | Billing | Billing routing / NOTIFY_TEAM |
-| AGENT | Sam Rivera | `sam.both@example.com` | `agent123!` | Support, Billing | Multi-team membership |
-| READ_ONLY | Riley Reader | `readonly@example.com` | `agent123!` | — | RBAC 403 checks |
-
-Reseed (cleans junk test users and resets the roster):
+| Role | Name | Email | Teams |
+|------|------|-------|-------|
+| OWNER | Ava Owner | `owner@example.com` | — |
+| ADMIN | Noah Admin | `admin@example.com` | — |
+| MANAGER | Maya Manager | `manager@example.com` | Support |
+| AGENT | Alex Agent | `agent@example.com` | Support, Billing |
+| AGENT | Priya Shah | `priya.support@example.com` | Support |
+| AGENT | Jordan Lee | `jordan.billing@example.com` | Billing |
+| AGENT | Sam Rivera | `sam.both@example.com` | Support, Billing |
+| READ_ONLY | Riley Reader | `readonly@example.com` | — |
 
 ```bash
 docker compose exec backend python -m app.scripts.seed
 ```
 
-## Notes
+---
 
-- **Automations:** `/automations`, `/automations/new`, detail + execution steps
-- **Business hours:** `/settings/business-hours` — editable schedule + holidays
-- **SLA:** timers on conversation create and priority change; breach check via Celery beat
-- **Execution logs:** audit trail + `GET /api/v1/automation-executions/:id`
+## Documentation (current)
+
+| Doc | Purpose |
+|-----|---------|
+| [run-guide.md](run-guide.md) | Run / demo |
+| [manual-test-scenarios.md](manual-test-scenarios.md) | Manual QA |
+| [codebase-map.md](codebase-map.md) | Code navigation |
+| [database/](database/) | Schema references |
+
+Historical day-by-day plans and audits were removed; schema + run/test docs are the source of truth.

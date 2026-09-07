@@ -37,6 +37,8 @@ STORAGE_ROOT_DIR=/tmp/support-attachments
 EMAIL_WEBHOOK_SECRET=mock-secret
 ```
 
+In Docker Compose, `STORAGE_ROOT_DIR` is backed by named volume `attachment_uploads` (and knowledge uploads by `knowledge_uploads`) so files survive restarts.
+
 Do **not** commit API keys. For **offline tests**, leave `GEMINI_API_KEY` empty.
 
 ## 2. Start the stack
@@ -385,9 +387,20 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" \
 
 **Inbound:** include `attachments` array in webhook payload (base64 content) — see `test_day5_attachments_inbound.py`.
 
-**Download (agent inbox):** `GET /api/v1/attachments/{id}/download` with bearer token streams the file. The inbox UI fetches this with auth (local `file://` storage URLs are not browser-downloadable).
+**Download (agent inbox):**
+
+```bash
+# After inbound creates a message with attachments:
+ATT_ID=...   # from GET /conversations/{id}/messages → attachments[0].id
+curl -s -L -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/api/v1/attachments/$ATT_ID/download" -o /tmp/invoice.txt
+```
+
+Inbox chips call the same endpoint with the session token (do not use relative `/api/v1/...` links in the SPA — that opens a blank page on `:5173`).
 
 **Outbound:** pass `attachment_ids` in `POST /conversations/{id}/email` body.
+
+**Persistence:** Compose mounts named volume `attachment_uploads` at `STORAGE_ROOT_DIR` (`/tmp/support-attachments`). Without that volume, container restarts drop files while DB rows remain → `404 Attachment file missing`.
 
 Attachment chips appear on messages in Inbox thread view.
 
@@ -398,10 +411,12 @@ See previous sections for knowledge search, classification, inbox walkthrough.
 ## 7. Troubleshooting
 
 - **Gemini 429 on tests**: unset `GEMINI_API_KEY` in `.env`, restart backend/worker
-- **No AI reply**: worker running, `enabled=true`, `mode=AUTO_REPLY`, not `HUMAN_CONTROL`
+- **No AI reply**: worker running, `enabled=true`, mode allows send, conversation not `HUMAN_CONTROL`
+- **Hello gets canned intro**: Settings → AI → soft-reply greetings (skips KB by design)
+- **Attachment download failed / file missing**: blob wiped from ephemeral disk — re-send inbound email, or ensure `attachment_uploads` volume is mounted
+- **Attachment click opens blank SPA page**: hard-refresh frontend (old build used relative `download_url` as `<a href>`)
 - **Duplicate replies**: idempotency via `processing_key`
-- **Evaluation fails with embedding errors**: run eval via Echo path (Settings button uses offline graph when no retrieval DB session in eval runner)
-- **Schema docs**: [`docs/database/day6-schema.md`](database/day6-schema.md), [`docs/database/day5-schema.md`](database/day5-schema.md), [`docs/database/day4-schema.md`](database/day4-schema.md)
+- **Schema docs**: [`docs/database/`](database/)
 
 ## 8. Non-Docker (optional)
 

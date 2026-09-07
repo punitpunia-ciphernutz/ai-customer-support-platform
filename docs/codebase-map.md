@@ -7,37 +7,40 @@ Use this doc when you need to change something and want to know **which folder/f
 | Doc | Purpose |
 |-----|---------|
 | [run-guide.md](run-guide.md) | How to run / demo |
-| [progress.md](progress.md) | What’s done (Day 1/2) |
-| [day1-day2-final-audit.md](day1-day2-final-audit.md) | Spec compliance |
+| [progress.md](progress.md) | Feature status + credentials |
+| [manual-test-scenarios.md](manual-test-scenarios.md) | Manual QA checklist |
+| [database/](database/) | Schema references |
 
 ---
 
 ## 1. Big picture
 
 ```
-Browser (React)
+Browser (React + embed widget.js)
     │  REST  /api/v1/*
-    │  WS    /ws  (agents)  ·  /ws/public  (web chat)
+    │  WS    /ws  (agents)  ·  /ws/public  (web chat / visitor)
     ▼
 FastAPI (backend/app)
-    ├── Auth / RBAC
-    ├── Support core: customers, conversations, tickets, teams
+    ├── Auth / RBAC / users / teams
+    ├── Support core: customers, conversations, tickets, assignment
+    ├── Channels: web chat, email webhooks, embeddable widgets
     ├── Knowledge: ingest → chunk → embed → pgvector → search
-    └── AI: classify via LangGraph (no auto-reply yet)
+    ├── AI: support agent graph, response policy, escalation
+    └── Automations / SLA / notifications / business hours
     │
     ├── PostgreSQL (+ pgvector)
-    ├── Redis (events pub/sub + Celery broker)
-    └── Celery worker (knowledge ingestion jobs)
+    ├── Redis (events + Celery)
+    └── Celery worker + beat
 ```
 
 | Layer | Lives in | Responsibility |
 |-------|----------|----------------|
-| UI | `frontend/src/` | Pages, forms, realtime inbox/chat |
+| UI | `frontend/src/` | Pages, forms, realtime inbox/chat, widget frame |
 | HTTP/WS API | `backend/app/modules/*/router.py` or `api/routes.py` | Validate request, auth, call services |
 | Business logic | `*/service.py`, `*/application/` | Domain rules, orchestration |
 | Persistence models | `infrastructure/database/models.py` + knowledge/ai domain models | Tables / ORM |
-| Background jobs | `backend/app/workers/` | Celery tasks (ingest) |
-| Infra glue | `backend/app/infrastructure/` | DB session, events, audit, logging |
+| Background jobs | `backend/app/workers/` | Celery tasks (ingest, AI message, beat jobs) |
+| Infra glue | `backend/app/infrastructure/` | DB session, events, audit, logging, object storage |
 | Config | `backend/app/config/settings.py` + `.env` | Env vars |
 
 ---
@@ -48,8 +51,8 @@ FastAPI (backend/app)
 AI Customer Support Platform/
 ├── backend/              # FastAPI + Celery + Alembic
 ├── frontend/             # React + Vite + TypeScript
-├── docs/                 # Plans, audits, this map
-├── docker-compose.yml    # postgres, redis, backend, worker, frontend
+├── docs/                 # Run guide, map, schemas, tests
+├── docker-compose.yml    # postgres, redis, backend, worker, beat, frontend
 ├── Makefile              # make up / down / migrate / test / logs
 ├── .env.example          # Env template (copy to .env)
 └── README.md
@@ -200,7 +203,18 @@ Each business area lives under `app/modules/<name>/`.
 |------|------|
 | `application/service.py` | Team/user assign, per-team ONLINE round-robin (`last_assigned_user_id`), `auto_assign_if_needed`, `ensure_assignee_for_team` (team transfer + ticket sync) |
 
-**Wired from:** escalation ticket create, ticket create/PATCH team change, conversation team PATCH, automation `ASSIGN_TEAM` / `ASSIGN_TICKET` / `CREATE_TICKET`, AI-disabled incoming route, conversation takeover (self-assign if unassigned). See `docs/auto-assignment-plan.md`.
+**Wired from:** escalation ticket create, ticket create/PATCH team change, conversation team PATCH, automation `ASSIGN_TEAM` / `ASSIGN_TICKET` / `CREATE_TICKET`, AI-disabled incoming route, conversation takeover (self-assign if unassigned).
+
+#### Attachments — `modules/attachments/`
+
+| File | Role |
+|------|------|
+| `router.py` | `POST /attachments`, `GET /attachments/{id}`, **`GET /attachments/{id}/download`** |
+| `service.py` | Upload/store/link; `get_download_url` → API path (not `file://`) |
+
+Storage: `infrastructure/storage/local.py` under `STORAGE_ROOT_DIR`. Docker volume `attachment_uploads` persists blobs. Inbox UI (`MessageBubble`) auth-fetches download and saves a blob.
+
+**Change here for:** download auth, storage backend, inbound email attachment wiring (also `conversations/service.py` `store_inbound`).
 
 #### Users — `modules/users/`
 
@@ -461,6 +475,9 @@ Set in root `.env` / `frontend/.env.example`. Compose bakes them in at **fronten
 | Add WhatsApp/email channel | New adapter in `conversations/channels.py` + wire in service |
 | Change inbox UI | `frontend/.../inbox/InboxPage.tsx` |
 | Change web chat UI | `frontend/.../conversations/WebChatPage.tsx` |
+| Change embed widget | `frontend/public/widget.js`, `frontend/src/widget/WidgetFrameApp.tsx` |
+| Change attachment download UI | `frontend/.../conversations/MessageBubble.tsx` + `modules/attachments/router.py` |
+| Change soft greeting / OOD replies | `ai/application/response_policy.py` + AI Settings |
 | Change knowledge UI | `frontend/.../knowledge/KnowledgePage.tsx` |
 | Change embedding model | `embeddings/provider.py` + `EMBEDDING_MODEL` in `.env` |
 | Change LLM model | `llm/providers.py` + `LLM_MODEL` in `.env` |
@@ -480,7 +497,7 @@ Set in root `.env` / `frontend/.env.example`. Compose bakes them in at **fronten
 3. **Org scoping** — almost every query filters by `organization_id` from the current user.  
 4. **Migrations are additive** — never rewrite applied revisions.  
 5. **Secrets** — only in `.env` (never commit). Examples live in `.env.example`.  
-6. **Day 3 boundary** — grounded auto-replies / agent tools are not in this codebase yet; add them via `AIService` + conversation service, not by sprinkling LLM calls in the UI.
+6. **AI replies** — go through `AIService` + Celery `process_ai_message`; response policy lives in `ai/application/response_policy.py`. Do not call the LLM from the UI.
 
 ---
 

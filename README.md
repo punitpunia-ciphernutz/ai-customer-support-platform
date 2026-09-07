@@ -1,4 +1,6 @@
-Single-tenant **Support Platform Core** (Day 1) plus **Knowledge Base + AI Foundation** (Day 2): auth, RBAC, customers, conversations, messages, tickets, realtime inbox, knowledge ingestion/retrieval (pgvector + Gemini embeddings), LangGraph classification.
+# AI Customer Support Platform
+
+Single-tenant AI customer support: auth/RBAC, inbox, knowledge base (RAG), multi-channel (web chat, email, embeddable widget), AI auto-reply with response policy, automations, SLA, and teams.
 
 ## Quick start
 
@@ -11,8 +13,8 @@ docker compose up --build
 
 - App: http://localhost:5173  
 - API docs: http://localhost:8000/docs  
-- Agent login: `agent@example.com` / `agent123!`
-- Full demo users (owner, admin, manager, agents, read-only): see [`docs/progress.md`](docs/progress.md)
+- Agent login: `agent@example.com` / `agent123!`  
+- Full demo users: [docs/progress.md](docs/progress.md)
 
 ## Stack
 
@@ -21,10 +23,10 @@ Frontend: React · TypeScript · Vite · TanStack Query · React Hook Form · Zo
 
 ## Documentation
 
-- [Codebase map](docs/codebase-map.md) — folders/files and where to change what
-- [Day 1 implementation plan](docs/day1-implementation-plan.md)
-- [Day 2 implementation plan](docs/day2-implementation-plan.md)
-- [Day 1+2 final audit](docs/day1-day2-final-audit.md)
-- [Progress](docs/progress.md)
-- [Run guide](docs/run-guide.md)
-- [Manual test scenarios](docs/manual-test-scenarios.md) — webchat, email curl, KB with/without, AI modes
+| Doc | Purpose |
+|-----|---------|
+| [Run guide](docs/run-guide.md) | Local setup, demos, email/widget/attachment curls |
+| [Manual test scenarios](docs/manual-test-scenarios.md) | QA checklist (webchat, email, KB, AI modes) |
+| [Codebase map](docs/codebase-map.md) | Where to change what in the repo |
+| [Progress](docs/progress.md) | Feature status + demo credentials |
+| [Database schemas](docs/database/) | Schema references (widgets, Day 4–6, response policy) |

@@ -604,6 +604,14 @@ curl -s -X POST "$API/webhooks/email/inbound" \
 
 **Expect**
 - [ ] Message shows attachment chip in Inbox
+- [ ] Clicking the chip downloads the file (not a blank `:5173/api/...` page)
+- [ ] API download works:
+
+```bash
+ATT_ID=$(curl -s "$API/conversations/$CONV_ID/messages" -H "Authorization: Bearer $TOKEN" \
+  | jq -r '.[-1].attachments[0].id')
+curl -s -H "Authorization: Bearer $TOKEN" "$API/attachments/$ATT_ID/download"
+```
 
 ### TC-EM-10 — Billing-intent email → automation routing
 
