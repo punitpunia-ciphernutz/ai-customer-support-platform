@@ -56,6 +56,13 @@ Idempotency for inbound webhooks.
 | `storage_key` | varchar(1024) | Object storage key |
 | `metadata` | JSONB | Extra fields |
 
+**Download:** Files live in object storage (`STORAGE_ROOT_DIR`, default `/tmp/support-attachments`). In Docker Compose this directory is a named volume (`attachment_uploads`) so files survive container restarts. Browsers must not use `file://` paths. Agents download via authenticated:
+
+- `GET /api/v1/attachments/{id}` → metadata + `download_url`
+- `GET /api/v1/attachments/{id}/download` → file bytes (`Content-Disposition: attachment`)
+
+`download_url` is the API path `/api/v1/attachments/{id}/download` (requires `conversations:read` bearer token). If the DB row exists but the blob is missing (e.g. wiped ephemeral disk), download returns `404 Attachment file missing`.
+
 ## New: `channel_configurations`
 
 Per-org channel settings (no plaintext secrets).

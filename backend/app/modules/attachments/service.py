@@ -74,7 +74,11 @@ class AttachmentService:
         return attachment
 
     async def get_download_url(self, attachment: Attachment) -> str:
-        return await self.storage.generate_url(attachment.storage_key)
+        """Return an API path the browser can fetch with auth (not file://)."""
+        return f"/api/v1/attachments/{attachment.id}/download"
+
+    async def read_bytes(self, attachment: Attachment) -> bytes:
+        return await self.storage.download(attachment.storage_key)
 
     async def list_for_message(self, message_id: str) -> list[Attachment]:
         result = await self.db.execute(

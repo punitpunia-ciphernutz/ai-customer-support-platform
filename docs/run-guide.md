@@ -385,6 +385,8 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" \
 
 **Inbound:** include `attachments` array in webhook payload (base64 content) — see `test_day5_attachments_inbound.py`.
 
+**Download (agent inbox):** `GET /api/v1/attachments/{id}/download` with bearer token streams the file. The inbox UI fetches this with auth (local `file://` storage URLs are not browser-downloadable).
+
 **Outbound:** pass `attachment_ids` in `POST /conversations/{id}/email` body.
 
 Attachment chips appear on messages in Inbox thread view.
