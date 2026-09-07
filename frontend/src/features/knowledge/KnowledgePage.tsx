@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormEvent, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, API_BASE, ApiError } from "@/services/api/client";
 import {
   Alert,
@@ -40,6 +40,7 @@ function isRetryableStatus(status: string): boolean {
 }
 
 export function KnowledgePage() {
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("");
@@ -149,12 +150,25 @@ export function KnowledgePage() {
               </thead>
               <tbody>
                 {filtered.map((s) => (
-                  <tr key={s.id}>
+                  <tr
+                    key={s.id}
+                    className="table-row-clickable"
+                    onClick={() => navigate(`/knowledge/${s.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        navigate(`/knowledge/${s.id}`);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="link"
+                    aria-label={`Manage source ${s.name}`}
+                  >
                     <td className="cell-primary">{s.name}</td>
                     <td><span className="badge badge-normal">{s.type}</span></td>
                     <td><span className={statusClass(s.status.toLowerCase())}>{s.status}</span></td>
                     <td className="text-sm text-muted">{formatDate(s.created_at)}</td>
-                    <td>
+                    <td onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
                         {isRetryableStatus(s.status) && (
                           <button

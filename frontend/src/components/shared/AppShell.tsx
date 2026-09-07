@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/features/auth/AuthContext";
 import { useTheme } from "@/app/ThemeContext";
 import { NotificationBell } from "@/features/notifications/NotificationBell";
@@ -32,11 +32,31 @@ const NAV = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const location = useLocation();
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
 
   const isActive = (to: string, exact?: boolean) =>
     exact ? location.pathname === to : location.pathname.startsWith(to);
+
+  useEffect(() => {
+    if (!profileOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setProfileOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [profileOpen]);
 
   return (
     <div className="shell">
@@ -64,30 +84,70 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="sidebar-footer">
-          <button
-            type="button"
-            className="sidebar-link"
-            onClick={toggleTheme}
-            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            title={theme === "dark" ? "Light mode" : "Dark mode"}
-          >
-            {theme === "dark" ? <IconSun size={18} /> : <IconMoon size={18} />}
-            {theme === "dark" ? "Light mode" : "Dark mode"}
-          </button>
-          <NotificationBell />
-          {user && (
-            <div className="sidebar-user">
-              <Avatar name={user.full_name} size="sm" />
-              <div className="sidebar-user-info">
-                <div className="sidebar-user-name">{user.full_name}</div>
-                <div className="sidebar-user-email">{user.email}</div>
+          <div className="sidebar-footer-bar">
+            {user && (
+              <div className="sidebar-profile" ref={profileRef}>
+                <button
+                  type="button"
+                  className={cn("sidebar-profile-btn", profileOpen && "is-open")}
+                  aria-label="Account menu"
+                  aria-expanded={profileOpen}
+                  aria-haspopup="menu"
+                  onClick={() => setProfileOpen((v) => !v)}
+                >
+                  <span className="sidebar-profile-avatar-wrap">
+                    <Avatar name={user.full_name} size="sm" />
+                    <span className="sidebar-profile-status" aria-hidden />
+                  </span>
+                </button>
+
+                {profileOpen && (
+                  <div className="sidebar-profile-menu" role="menu" aria-label="Account">
+                    <div className="sidebar-profile-menu-header">
+                      <div className="sidebar-user-name">{user.full_name}</div>
+                      <div className="sidebar-user-email">{user.email}</div>
+                    </div>
+                    <div className="sidebar-theme-toggle" role="group" aria-label="Theme">
+                      <button
+                        type="button"
+                        className={cn("sidebar-theme-option", theme === "light" && "is-active")}
+                        aria-pressed={theme === "light"}
+                        onClick={() => setTheme("light")}
+                      >
+                        <IconSun size={14} />
+                        Light
+                      </button>
+                      <button
+                        type="button"
+                        className={cn("sidebar-theme-option", theme === "dark" && "is-active")}
+                        aria-pressed={theme === "dark"}
+                        onClick={() => setTheme("dark")}
+                      >
+                        <IconMoon size={14} />
+                        Dark
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      className="sidebar-profile-menu-item is-danger"
+                      role="menuitem"
+                      onClick={() => {
+                        setProfileOpen(false);
+                        void logout();
+                      }}
+                    >
+                      <IconLogout size={16} />
+                      Log out
+                    </button>
+                  </div>
+                )}
               </div>
+            )}
+
+            <div className="sidebar-footer-actions">
+              <NotificationBell compact />
             </div>
-          )}
-          <button type="button" className="sidebar-link" onClick={() => void logout()}>
-            <IconLogout size={18} />
-            Log out
-          </button>
+          </div>
         </div>
       </aside>
       <main className="shell-main">{children}</main>

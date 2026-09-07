@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/services/api/client";
@@ -14,6 +15,12 @@ type ToastState = {
   title: string;
   body: string;
   event_type: string;
+};
+
+type PanelCoords = {
+  bottom: number;
+  left: number;
+  width: number;
 };
 
 function playNotifyChime() {
@@ -43,13 +50,15 @@ function playNotifyChime() {
   }
 }
 
-export function NotificationBell() {
+export function NotificationBell({ compact = false }: { compact?: boolean }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [ringing, setRinging] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [coords, setCoords] = useState<PanelCoords | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const toastTimer = useRef<number | null>(null);
   const ringTimer = useRef<number | null>(null);
@@ -102,12 +111,48 @@ export function NotificationBell() {
     },
   });
 
+  const updateCoords = () => {
+    const btn = rootRef.current?.querySelector("button");
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const width = Math.min(352, window.innerWidth - 16);
+    let left = compact ? rect.left : rect.left;
+    if (compact) {
+      // Prefer opening into the main content area from the bell.
+      left = Math.min(rect.left, window.innerWidth - width - 8);
+      left = Math.max(8, left);
+    } else {
+      left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+    }
+    setCoords({
+      bottom: window.innerHeight - rect.top + 8,
+      left,
+      width,
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setCoords(null);
+      return;
+    }
+    updateCoords();
+    const onResize = () => updateCoords();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onResize, true);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onResize, true);
+    };
+  }, [open, compact]);
+
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -167,15 +212,83 @@ export function NotificationBell() {
     setOpen(true);
   };
 
+  const panel = open && coords && (
+    <div
+      ref={panelRef}
+      className={cn("notification-panel", compact && "is-fixed")}
+      role="dialog"
+      aria-label="Notifications"
+      style={{
+        position: "fixed",
+        left: coords.left,
+        bottom: coords.bottom,
+        width: coords.width,
+        right: "auto",
+        top: "auto",
+      }}
+    >
+      <div className="notification-panel-header">
+        <div>
+          <strong>Notifications{unread > 0 ? ` (${unread})` : ""}</strong>
+          <div className="notification-panel-sub">
+            {unread > 0 ? `${unread} unread` : "You're all caught up"}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          disabled={unread === 0 || markAll.isPending}
+          onClick={() => markAll.mutate()}
+        >
+          Mark all read
+        </button>
+      </div>
+      <div className="notification-panel-list">
+        {notifications.isLoading && (
+          <p className="notification-empty text-sm text-muted">Loading…</p>
+        )}
+        {!notifications.isLoading && items.length === 0 && (
+          <div className="notification-empty">
+            <IconEmpty size={36} />
+            <p>No notifications yet</p>
+            <span className="text-sm text-muted">Alerts from automations and escalations will show up here.</span>
+          </div>
+        )}
+        {items.map((n) => (
+          <button
+            key={n.id}
+            type="button"
+            className={cn("notification-item", !n.read_at && "unread")}
+            onClick={() => openItem(n)}
+          >
+            <span className={cn("notification-item-rail", !n.read_at && "active")} aria-hidden />
+            <div className="notification-item-content">
+              <div className="notification-item-title-row">
+                <div className="notification-item-title">{n.title}</div>
+                {!n.read_at && <span className="notification-item-new">New</span>}
+              </div>
+              <div className="notification-item-body">{n.body}</div>
+              <div className="notification-item-meta">
+                <span>{n.event_type.replace(/_/g, " ").toLowerCase()}</span>
+                <span>{formatRelative(n.created_at)}</span>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <>
-      <div className="notification-bell" ref={panelRef}>
+      <div className={cn("notification-bell", compact && "is-compact")} ref={rootRef}>
         <button
           type="button"
           className={cn(
-            "sidebar-link notification-bell-btn",
+            compact ? "sidebar-footer-icon-btn notification-bell-btn" : "sidebar-link notification-bell-btn",
             unread > 0 && "has-unread",
             ringing && "is-ringing",
+            open && "is-open",
           )}
           aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
           aria-expanded={open}
@@ -189,68 +302,21 @@ export function NotificationBell() {
             <IconBell size={18} />
             {unread > 0 && <span className="notification-dot" />}
           </span>
-          Notifications
-          {unread > 0 && (
+          {!compact && "Notifications"}
+          {!compact && unread > 0 && (
             <span className={cn("notification-badge", ringing && "pulse")}>
               {unread > 99 ? "99+" : unread}
             </span>
           )}
+          {compact && unread > 0 && (
+            <span className={cn("notification-badge notification-badge-compact", ringing && "pulse")}>
+              {unread > 99 ? "99+" : unread}
+            </span>
+          )}
         </button>
-
-        {open && (
-          <div className="notification-panel" role="dialog" aria-label="Notifications">
-            <div className="notification-panel-header">
-              <div>
-                <strong>Notifications</strong>
-                <div className="notification-panel-sub">
-                  {unread > 0 ? `${unread} unread` : "You're all caught up"}
-                </div>
-              </div>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                disabled={unread === 0 || markAll.isPending}
-                onClick={() => markAll.mutate()}
-              >
-                Mark all read
-              </button>
-            </div>
-            <div className="notification-panel-list">
-              {notifications.isLoading && (
-                <p className="notification-empty text-sm text-muted">Loading…</p>
-              )}
-              {!notifications.isLoading && items.length === 0 && (
-                <div className="notification-empty">
-                  <IconEmpty size={36} />
-                  <p>No notifications yet</p>
-                  <span className="text-sm text-muted">Alerts from automations and escalations will show up here.</span>
-                </div>
-              )}
-              {items.map((n) => (
-                <button
-                  key={n.id}
-                  type="button"
-                  className={cn("notification-item", !n.read_at && "unread")}
-                  onClick={() => openItem(n)}
-                >
-                  <span className={cn("notification-item-rail", !n.read_at && "active")} aria-hidden />
-                  <div className="notification-item-content">
-                    <div className="notification-item-title-row">
-                      <div className="notification-item-title">{n.title}</div>
-                      {!n.read_at && <span className="notification-item-new">New</span>}
-                    </div>
-                    <div className="notification-item-body">{n.body}</div>
-                    <div className="notification-item-meta">
-                      <span>{n.event_type.replace(/_/g, " ").toLowerCase()}</span>
-                      <span>{formatRelative(n.created_at)}</span>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
+
+      {panel && createPortal(panel, document.body)}
 
       {toast && (
         <div className="notification-toast" role="status" aria-live="polite">

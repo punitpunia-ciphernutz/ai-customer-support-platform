@@ -110,16 +110,20 @@ a:hover {
 }
 
 .shell-sidebar {
+  position: relative;
+  z-index: 40;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   padding: 1.25rem 0.875rem;
   gap: 0.5rem;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .shell-main {
+  position: relative;
+  z-index: 1;
   min-width: 0;
   height: 100%;
   overflow: hidden;
@@ -164,6 +168,9 @@ a:hover {
   flex-direction: column;
   gap: 0.125rem;
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .sidebar-link {
@@ -204,12 +211,183 @@ a:hover {
 }
 
 .sidebar-footer {
+  position: relative;
+  z-index: 50;
   margin-top: auto;
-  padding-top: 1rem;
+  padding-top: 0.875rem;
   border-top: 1px solid var(--border);
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.sidebar-footer-bar {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+}
+
+.sidebar-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.sidebar-footer-icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-footer-icon-btn:hover,
+.sidebar-footer-icon-btn.is-open {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.sidebar-footer-icon-btn svg {
+  opacity: 0.85;
+}
+
+.sidebar-profile {
+  position: relative;
+}
+
+.sidebar-profile-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sidebar-profile-btn:hover,
+.sidebar-profile-btn.is-open {
+  background: var(--bg-elevated);
+}
+
+.sidebar-profile-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.sidebar-profile-status {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--bg-sidebar);
+}
+
+.sidebar-profile-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 0.5rem);
+  z-index: 55;
+  width: 13.5rem;
+  padding: 0.4rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: notification-panel-in 0.16s ease-out;
+}
+
+.sidebar-profile-menu-header {
+  padding: 0.55rem 0.65rem 0.65rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.35rem;
+}
+
+.sidebar-profile-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-profile-menu-item:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.sidebar-profile-menu-item.is-danger:hover {
+  background: var(--danger-muted);
+  color: var(--danger);
+}
+
+.sidebar-profile-menu-item svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.sidebar-theme-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem;
+  padding: 0.15rem;
+  margin-bottom: 0.25rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+}
+
+.sidebar-theme-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.35rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-theme-option:hover {
+  color: var(--text);
+}
+
+.sidebar-theme-option.is-active {
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.sidebar-theme-option svg {
+  opacity: 0.85;
 }
 
 .sidebar-user {
@@ -688,10 +866,6 @@ a:hover {
   border-bottom: none;
 }
 
-.data-table tbody tr:hover {
-  background: var(--hover);
-}
-
 .table-footer {
   display: flex;
   justify-content: space-between;
@@ -761,9 +935,158 @@ a:hover {
 
 /* ── Agent availability (inbox header) ── */
 .availability-control {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.availability-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2rem;
+  padding: 0.35rem 0.75rem 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  box-shadow: var(--shadow);
+}
+
+.availability-pill:hover:not(:disabled) {
+  background: var(--bg-elevated);
+}
+
+.availability-pill:focus-visible,
+.availability-pill.is-open {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-muted);
+  outline: none;
+}
+
+.availability-pill.is-online {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.35);
+  color: #15803d;
+}
+
+[data-theme="dark"] .availability-pill.is-online {
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #86efac;
+}
+
+.availability-pill.is-away {
+  background: rgba(234, 179, 8, 0.12);
+  border-color: rgba(234, 179, 8, 0.4);
+  color: #a16207;
+}
+
+[data-theme="dark"] .availability-pill.is-away {
+  background: rgba(234, 179, 8, 0.14);
+  border-color: rgba(234, 179, 8, 0.4);
+  color: #fde68a;
+}
+
+.availability-pill.is-offline {
+  background: var(--bg-elevated);
+  border-color: var(--border-light);
+  color: var(--text-secondary);
+}
+
+.availability-pill.is-pending,
+.availability-pill:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.availability-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  padding-right: 0.15rem;
+}
+
+.availability-chevron {
+  flex-shrink: 0;
+  opacity: 0.65;
+  transition: transform 0.15s ease;
+}
+
+.availability-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.availability-menu {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  z-index: 70;
+  min-width: 15rem;
+  padding: 0.35rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-light);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg);
+  animation: availability-menu-in 0.14s ease-out;
+}
+
+.availability-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.availability-option:hover {
+  background: var(--hover);
+}
+
+.availability-option.is-selected {
+  background: var(--accent-muted);
+}
+
+.availability-option.is-selected:hover {
+  background: var(--accent-muted);
+}
+
+.availability-option .status-dot {
+  margin-top: 0.3rem;
+}
+
+.availability-option-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.availability-option-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.availability-option-hint {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+  line-height: 1.35;
 }
 
 .status-dot {
@@ -772,18 +1095,39 @@ a:hover {
   border-radius: 50%;
   flex-shrink: 0;
   background: var(--text-muted);
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.15);
 }
 
 .status-dot.status-online {
   background: #22c55e;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
 }
 
 .status-dot.status-away {
   background: #eab308;
+  box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.22);
 }
 
 .status-dot.status-offline {
   background: var(--text-muted);
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.15);
+}
+
+.availability-error {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--danger);
+}
+
+@keyframes availability-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ── Filters ── */
@@ -1289,9 +1633,15 @@ a:hover {
 .notification-bell {
   position: relative;
 }
+.notification-bell.is-compact {
+  display: inline-flex;
+}
 .notification-bell-btn {
   width: 100%;
   position: relative;
+}
+.notification-bell.is-compact .notification-bell-btn {
+  width: 2.25rem;
 }
 .notification-bell-btn.has-unread {
   color: var(--text);
@@ -1315,6 +1665,9 @@ a:hover {
   background: var(--danger);
   box-shadow: 0 0 0 2px var(--bg-sidebar);
 }
+.notification-bell.is-compact .notification-dot {
+  display: none;
+}
 .notification-bell-btn.is-ringing .notification-bell-icon-wrap {
   animation: notification-ring 0.55s ease-in-out 3;
   transform-origin: top center;
@@ -1333,6 +1686,20 @@ a:hover {
   align-items: center;
   justify-content: center;
 }
+.notification-badge-compact {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.05rem;
+  margin-left: 0;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 0.25rem;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.625rem;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--bg-sidebar);
+}
 .notification-badge.pulse {
   animation: notification-badge-pulse 1s ease-in-out 3;
 }
@@ -1340,17 +1707,20 @@ a:hover {
   position: absolute;
   left: 0;
   bottom: calc(100% + 0.5rem);
-  z-index: 50;
+  z-index: 60;
   width: min(22rem, calc(100vw - 1.5rem));
   background: var(--bg-elevated);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
-  max-height: 26rem;
+  max-height: min(26rem, calc(100vh - 5rem));
   display: flex;
   flex-direction: column;
   overflow: hidden;
   animation: notification-panel-in 0.16s ease-out;
+}
+.notification-panel.is-fixed {
+  z-index: 90;
 }
 .notification-panel-header {
   display: flex;

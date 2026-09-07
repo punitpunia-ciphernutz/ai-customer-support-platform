@@ -190,6 +190,14 @@ export function IconChevronRight(props: IconProps) {
   );
 }
 
+export function IconChevronDown(props: IconProps) {
+  return (
+    <Icon size={16} {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </Icon>
+  );
+}
+
 export function IconCopy(props: IconProps) {
   return (
     <Icon size={14} {...props}>
