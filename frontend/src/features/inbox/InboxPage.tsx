@@ -77,6 +77,7 @@ export function InboxPage() {
     queryKey: ["messages", selectedId],
     queryFn: () => api<Message[]>(`/conversations/${selectedId}/messages`),
     enabled: !!selectedId,
+    refetchInterval: selectedId ? 2000 : false,
   });
 
   const conversationAiUsage = useQuery({
@@ -90,6 +91,7 @@ export function InboxPage() {
     onEvent: (event) => {
       if (
         event.name === "message.created" ||
+        event.name === "message.received" ||
         event.name?.startsWith("conversation.") ||
         event.name?.startsWith("ticket.")
       ) {

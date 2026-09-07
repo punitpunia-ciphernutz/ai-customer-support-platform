@@ -145,12 +145,26 @@ export function WidgetFrameApp() {
     }
   }, [conversationId, session?.visitor_token, loadMessages]);
 
+  // Poll so AI replies appear without a full page refresh if WS is delayed.
+  useEffect(() => {
+    if (!conversationId || !session?.visitor_token) return undefined;
+    const token = session.visitor_token;
+    const id = window.setInterval(() => {
+      void loadMessages(conversationId, token).catch(() => undefined);
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [conversationId, session?.visitor_token, loadMessages]);
+
   useSupportSocket({
     token: session?.visitor_token ?? null,
     publicSocket: true,
     conversationId,
     onEvent: (event) => {
-      if (event.name === "message.created" && conversationId && session?.visitor_token) {
+      if (
+        (event.name === "message.created" || event.name === "message.received") &&
+        conversationId &&
+        session?.visitor_token
+      ) {
         void loadMessages(conversationId, session.visitor_token);
       }
     },

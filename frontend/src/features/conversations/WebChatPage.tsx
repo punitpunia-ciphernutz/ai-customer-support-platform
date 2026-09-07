@@ -59,11 +59,25 @@ export function WebChatPage() {
     }
   }, [conversationId, customerId]);
 
+  // Poll so AI/agent replies appear without a full page refresh if WS is delayed.
+  useEffect(() => {
+    if (!conversationId || !customerId) return undefined;
+    const id = window.setInterval(() => {
+      void loadMessages(conversationId, customerId).catch(() => undefined);
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [conversationId, customerId]);
+
   useSupportSocket({
     token: null,
     publicSocket: true,
+    conversationId: conversationId || null,
     onEvent: (event) => {
-      if (event.name === "message.created" && conversationId) {
+      if (
+        (event.name === "message.created" || event.name === "message.received") &&
+        conversationId &&
+        customerId
+      ) {
         void loadMessages(conversationId, customerId);
       }
     },

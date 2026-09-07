@@ -139,6 +139,8 @@ async def create_customer(
             payload={"customer_id": customer.id},
         )
     )
+    # Commit before response so chained public chat create can find the customer.
+    await db.commit()
     return customer
 
 

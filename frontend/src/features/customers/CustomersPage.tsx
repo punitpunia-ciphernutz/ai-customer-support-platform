@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/icons";
 import { formatDate } from "@/utils/format";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/features/auth/AuthContext";
 import type { Conversation, Customer, Ticket } from "@/types";
 
 const schema = z.object({
@@ -41,11 +42,14 @@ const PAGE_SIZE = 10;
 
 export function CustomersPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const isOrgAdmin = user?.role.name === "OWNER" || user?.role.name === "ADMIN";
+  const ticketView = isOrgAdmin ? "all" : "team";
 
   const customers = useQuery({
     queryKey: ["customers"],
@@ -58,8 +62,8 @@ export function CustomersPage() {
   });
 
   const tickets = useQuery({
-    queryKey: ["tickets"],
-    queryFn: () => api<Ticket[]>("/tickets"),
+    queryKey: ["tickets", ticketView],
+    queryFn: () => api<Ticket[]>(`/tickets?view=${ticketView}`),
   });
 
   const {

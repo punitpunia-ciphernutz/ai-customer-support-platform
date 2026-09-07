@@ -221,16 +221,25 @@ class AIService:
         if conv is None:
             return None
 
-        config = await RuntimeAIConfig.resolve(self.db, conv.organization_id, conv.channel)
+        # Capture scalars before side effects may expire/detach ORM instances.
+        organization_id = conv.organization_id
+        conversation_id = conv.id
+        customer_id = conv.customer_id
+        channel_value = conv.channel.value if hasattr(conv.channel, "value") else str(conv.channel)
+        msg_id = msg.id
+        channel = conv.channel
+        ai_control_mode = conv.ai_control_mode
+
+        config = await RuntimeAIConfig.resolve(self.db, organization_id, channel)
         if not config.enabled:
             from app.modules.ai.application.missed_chat_service import MissedChatService
 
-            await MissedChatService(self.db).route_incoming_if_ai_disabled(conv.id, conv.organization_id)
+            await MissedChatService(self.db).route_incoming_if_ai_disabled(conversation_id, organization_id)
             return None
 
         from app.infrastructure.database.models import AIControlMode
 
-        if conv.ai_control_mode == AIControlMode.HUMAN_CONTROL:
+        if ai_control_mode == AIControlMode.HUMAN_CONTROL:
             return None
 
         existing = await self._get_existing_agent_run(message_id)
@@ -242,23 +251,39 @@ class AIService:
         }:
             return existing
 
-        _, run = await self.run_support_agent(msg.conversation_id, message_id, persist_side_effects=True)
+        _, run = await self.run_support_agent(conversation_id, message_id, persist_side_effects=True)
         if run is not None:
-            await self._emit_message_received(msg, conv, run)
+            await self._emit_message_received(
+                message_id=msg_id,
+                organization_id=organization_id,
+                conversation_id=conversation_id,
+                customer_id=customer_id,
+                channel=channel_value,
+                run=run,
+            )
         return run
 
-    async def _emit_message_received(self, msg: Message, conv: Conversation, run: AIRun) -> None:
+    async def _emit_message_received(
+        self,
+        *,
+        message_id: str,
+        organization_id: str,
+        conversation_id: str,
+        customer_id: str | None,
+        channel: str,
+        run: AIRun,
+    ) -> None:
         from app.infrastructure.events import DomainEvent, event_bus
 
         await event_bus.publish(
             DomainEvent(
                 name="message.received",
-                organization_id=conv.organization_id,
+                organization_id=organization_id,
                 payload={
-                    "message_id": msg.id,
-                    "conversation_id": conv.id,
-                    "customer_id": conv.customer_id,
-                    "channel": conv.channel.value if hasattr(conv.channel, "value") else str(conv.channel),
+                    "message_id": message_id,
+                    "conversation_id": conversation_id,
+                    "customer_id": customer_id,
+                    "channel": channel,
                     "intent": run.intent,
                     "sentiment": run.sentiment,
                     "confidence": run.confidence,
@@ -269,11 +294,11 @@ class AIService:
             await event_bus.publish(
                 DomainEvent(
                     name="ai.escalated" if run.decision == "ESCALATE" else "ai.low_confidence",
-                    organization_id=conv.organization_id,
+                    organization_id=organization_id,
                     payload={
-                        "message_id": msg.id,
-                        "conversation_id": conv.id,
-                        "customer_id": conv.customer_id,
+                        "message_id": message_id,
+                        "conversation_id": conversation_id,
+                        "customer_id": customer_id,
                         "intent": run.intent,
                         "sentiment": run.sentiment,
                         "confidence": run.confidence,

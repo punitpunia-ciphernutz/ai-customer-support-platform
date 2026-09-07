@@ -910,14 +910,16 @@ class ConversationService:
         delivery_value = (
             msg.delivery_status.value if msg.delivery_status and hasattr(msg.delivery_status, "value") else msg.delivery_status
         )
+        message_id = msg.id
+        sender_type = msg.sender_type.value
         await event_bus.publish(
             DomainEvent(
                 name="message.created",
                 organization_id=conversation.organization_id,
                 payload={
-                    "message_id": msg.id,
+                    "message_id": message_id,
                     "conversation_id": conversation.id,
-                    "sender_type": msg.sender_type.value,
+                    "sender_type": sender_type,
                     "sender_id": msg.sender_id,
                     "content": msg.content,
                     "channel": channel_value,
@@ -926,4 +928,6 @@ class ConversationService:
                 },
             )
         )
-        enqueue_ai_message_processing(msg.id, msg.sender_type.value)
+        # Commit before Celery enqueue so the worker can load the message row.
+        await self.db.commit()
+        enqueue_ai_message_processing(message_id, sender_type)
