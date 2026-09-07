@@ -68,6 +68,7 @@ export function AgentAvailabilityControl() {
         disabled={patch.isPending || availability.isLoading}
         onChange={(e) => patch.mutate(e.target.value as AgentStatus)}
         aria-label="Agent availability"
+        title="Online agents can receive automatic assignments for their teams. Away and Offline are skipped."
       >
         {(Object.keys(STATUS_LABELS) as AgentStatus[]).map((s) => (
           <option key={s} value={s}>

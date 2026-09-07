@@ -157,15 +157,41 @@ class ConversationService:
                     status_code=status.HTTP_403_FORBIDDEN, detail="Missing assign permission"
                 )
 
-        for key, value in data.items():
-            setattr(conversation, key, value)
-        await self.db.flush()
-        await self.db.refresh(conversation)
-
         assignment = AssignmentService(self.db)
-        if old["assigned_user_id"] != conversation.assigned_user_id:
-            await assignment._adjust_active_count(old["assigned_user_id"], -1)  # noqa: SLF001
-            await assignment._adjust_active_count(conversation.assigned_user_id, 1)  # noqa: SLF001
+        team_in = "assigned_team_id" in data
+        user_in = "assigned_user_id" in data
+        new_team_id = data.get("assigned_team_id") if team_in else None
+        team_changing = team_in and data.get("assigned_team_id") != conversation.assigned_team_id
+
+        if team_changing and new_team_id and not user_in:
+            data.pop("assigned_team_id", None)
+            for key, value in data.items():
+                setattr(conversation, key, value)
+            await self.db.flush()
+            await assignment.ensure_assignee_for_team(
+                user.organization_id,
+                new_team_id,
+                conversation_id=conversation.id,
+                sync_linked_tickets=True,
+            )
+            await self.db.refresh(conversation)
+        else:
+            for key, value in data.items():
+                setattr(conversation, key, value)
+            await self.db.flush()
+            await self.db.refresh(conversation)
+
+            if old["assigned_user_id"] != conversation.assigned_user_id:
+                await assignment._adjust_active_count(old["assigned_user_id"], -1)  # noqa: SLF001
+                await assignment._adjust_active_count(conversation.assigned_user_id, 1)  # noqa: SLF001
+            if team_changing or user_in:
+                await assignment._sync_tickets_with_conversation(  # noqa: SLF001
+                    conversation.id,
+                    team_id=conversation.assigned_team_id,
+                    assigned_user_id=conversation.assigned_user_id,
+                    primary_ticket=None,
+                    sync_linked_tickets=True,
+                )
 
         sla = SLAService(self.db)
         if old["priority"] != conversation.priority.value:
@@ -702,6 +728,16 @@ class ConversationService:
     async def takeover(self, user: User, conversation_id: str) -> Conversation:
         conversation = await self.get_conversation(user.organization_id, conversation_id)
         conversation.ai_control_mode = AIControlMode.HUMAN_CONTROL
+        if conversation.assigned_user_id is None:
+            from app.modules.assignment.application.service import AssignmentService
+
+            # Takeover is intentional — assign the actor even if Away/Offline.
+            await AssignmentService(self.db).assign_user(
+                conversation_id,
+                user.organization_id,
+                user.id,
+                skip_eligibility=True,
+            )
         await write_audit(
             self.db,
             organization_id=user.organization_id,

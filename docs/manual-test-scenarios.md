@@ -683,6 +683,28 @@ Use this as a coverage grid. Run after TC-KB-01.
 **Expect**
 - [ ] Missed-chat ticket or automation execution appears
 
+### TC-AU-02b — Auto-assign on human need (team round-robin)
+
+**Pre:** At least two agents on **Support**, both set **Online** in the inbox status dropdown. Optionally one Billing Online agent for the Billing case.
+
+**Steps**
+1. Create a new web chat → confirm Team = Support, Assignee = Unassigned (no auto-assign on create)
+2. Trigger AI escalation (or create ticket from conversation) while Support agents are Online
+3. Repeat escalation on a fresh conversation; confirm assignees rotate among Online Support members (`A → B → …`)
+4. Set Support agents Away/Offline; escalate again → Team stays Support, Assignee stays Unassigned
+5. With intent→Billing routing (or team set to Billing before escalate): only a **Billing** Online member is assigned — never a Support-only agent
+6. Takeover an Unassigned conversation → assignee becomes the taking agent
+7. After a Support ticket is assigned, transfer team to **Billing** (Tickets or Inbox team select) → previous Support assignee cleared; Billing Online member assigned; conversation + ticket stay in sync
+8. Transfer to a team with no Online members → team updates, assignee becomes Unassigned
+
+**Expect**
+- [ ] Create never sets a user assignee
+- [ ] Escalation assigns an Online member of the conversation’s **current** team
+- [ ] Rotation stays within that team; Away/Offline skipped
+- [ ] No Online on that team → Unassigned user, team preserved
+- [ ] Manual assignee is never overwritten by auto-assign
+- [ ] Team transfer reassigns from the **new** team only and syncs conversation + ticket
+
 ### TC-AU-03 — SLA (high/urgent)
 
 **Steps**

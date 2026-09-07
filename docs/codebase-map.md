@@ -194,6 +194,14 @@ Each business area lives under `app/modules/<name>/`.
 | `service.py` | Membership, unique name, delete guards |
 | `access.py` | Shared team membership + ticket visibility helpers |
 
+#### Assignment — `modules/assignment/`
+
+| File | Role |
+|------|------|
+| `application/service.py` | Team/user assign, per-team ONLINE round-robin (`last_assigned_user_id`), `auto_assign_if_needed`, `ensure_assignee_for_team` (team transfer + ticket sync) |
+
+**Wired from:** escalation ticket create, ticket create/PATCH team change, conversation team PATCH, automation `ASSIGN_TEAM` / `ASSIGN_TICKET` / `CREATE_TICKET`, AI-disabled incoming route, conversation takeover (self-assign if unassigned). See `docs/auto-assignment-plan.md`.
+
 #### Users — `modules/users/`
 
 | File | Role |

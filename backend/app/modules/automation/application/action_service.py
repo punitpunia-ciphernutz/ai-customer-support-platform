@@ -133,6 +133,14 @@ async def _create_ticket(db: AsyncSession, ctx: AutomationContext, action: dict[
     db.add(ticket)
     await db.flush()
     ctx.ticket_id = ticket.id
+    if ticket.assigned_team_id:
+        await AssignmentService(db).ensure_assignee_for_team(
+            ctx.organization_id,
+            ticket.assigned_team_id,
+            conversation_id=ctx.conversation_id,
+            ticket=ticket,
+            sync_linked_tickets=True,
+        )
     if idempotency:
         created = dict(ctx.metadata.get("ticket_created_for") or {})
         created[idempotency] = ticket.id
@@ -149,17 +157,41 @@ async def _assign_ticket(db: AsyncSession, ctx: AutomationContext, action: dict[
         return {"skipped": True}
     team = action.get("value") or action.get("config", {}).get("team")
     user_id = action.get("config", {}).get("user_id")
-    changed = False
-    if team:
+    assignment = AssignmentService(db)
+    if team and not user_id:
         team_id = await NotificationService(db).resolve_team_id(ctx.organization_id, str(team))
-        if team_id and ticket.assigned_team_id != team_id:
-            ticket.assigned_team_id = team_id
+        if not team_id:
+            return {"skipped": True, "reason": "team not found"}
+        if ticket.assigned_team_id == team_id and ticket.assigned_user_id:
+            return {"changed": False, "ticket_id": ticket_id}
+        await assignment.ensure_assignee_for_team(
+            ctx.organization_id,
+            team_id,
+            conversation_id=ticket.conversation_id or ctx.conversation_id,
+            ticket=ticket,
+            sync_linked_tickets=True,
+        )
+        return {"changed": True, "ticket_id": ticket_id}
+    changed = False
+    team_id = ticket.assigned_team_id
+    if team:
+        resolved = await NotificationService(db).resolve_team_id(ctx.organization_id, str(team))
+        if resolved and ticket.assigned_team_id != resolved:
+            team_id = resolved
             changed = True
+    new_user = ticket.assigned_user_id
     if user_id and ticket.assigned_user_id != user_id:
-        ticket.assigned_user_id = str(user_id)
+        new_user = str(user_id)
         changed = True
     if changed:
-        await db.flush()
+        await assignment.sync_manual_assignment(
+            ctx.organization_id,
+            conversation_id=ticket.conversation_id or ctx.conversation_id or "",
+            assigned_team_id=team_id,
+            assigned_user_id=new_user,
+            ticket=ticket,
+            sync_linked_tickets=True,
+        )
     return {"changed": changed, "ticket_id": ticket_id}
 
 

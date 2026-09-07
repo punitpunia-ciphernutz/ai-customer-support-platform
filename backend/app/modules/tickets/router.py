@@ -68,16 +68,60 @@ async def create_ticket(
     conversation = conv.scalar_one_or_none()
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    ticket = Ticket(
-        organization_id=user.organization_id,
-        conversation_id=conversation.id,
-        status=TicketStatus.OPEN,
-        priority=body.priority,
-        assigned_user_id=body.assigned_user_id,
-        assigned_team_id=body.assigned_team_id,
-    )
-    db.add(ticket)
-    await db.flush()
+
+    from app.modules.assignment.application.service import AssignmentService
+
+    team_id = body.assigned_team_id or conversation.assigned_team_id
+    assignment = AssignmentService(db)
+
+    if body.assigned_user_id is not None:
+        ticket = Ticket(
+            organization_id=user.organization_id,
+            conversation_id=conversation.id,
+            status=TicketStatus.OPEN,
+            priority=body.priority,
+            assigned_user_id=body.assigned_user_id,
+            assigned_team_id=team_id,
+        )
+        db.add(ticket)
+        await db.flush()
+        await assignment.sync_manual_assignment(
+            user.organization_id,
+            conversation_id=conversation.id,
+            assigned_team_id=team_id,
+            assigned_user_id=body.assigned_user_id,
+            ticket=ticket,
+            sync_linked_tickets=True,
+        )
+    elif team_id:
+        ticket = Ticket(
+            organization_id=user.organization_id,
+            conversation_id=conversation.id,
+            status=TicketStatus.OPEN,
+            priority=body.priority,
+            assigned_team_id=team_id,
+        )
+        db.add(ticket)
+        await db.flush()
+        await assignment.ensure_assignee_for_team(
+            user.organization_id,
+            team_id,
+            conversation_id=conversation.id,
+            ticket=ticket,
+            sync_linked_tickets=True,
+        )
+    else:
+        ticket = Ticket(
+            organization_id=user.organization_id,
+            conversation_id=conversation.id,
+            status=TicketStatus.OPEN,
+            priority=body.priority,
+            assigned_user_id=body.assigned_user_id,
+            assigned_team_id=body.assigned_team_id,
+        )
+        db.add(ticket)
+        await db.flush()
+
     await db.refresh(ticket)
     await write_audit(
         db,
@@ -122,8 +166,41 @@ async def update_ticket(
         "priority": ticket.priority.value,
     }
     data = body.model_dump(exclude_unset=True)
-    for key, value in data.items():
-        setattr(ticket, key, value)
+    team_in_payload = "assigned_team_id" in data
+    user_in_payload = "assigned_user_id" in data
+    new_team_id = data.get("assigned_team_id") if team_in_payload else ticket.assigned_team_id
+    team_changing = team_in_payload and data.get("assigned_team_id") != ticket.assigned_team_id
+
+    from app.modules.assignment.application.service import AssignmentService
+
+    assignment = AssignmentService(db)
+
+    if team_changing and new_team_id and not user_in_payload:
+        data.pop("assigned_team_id", None)
+        for key, value in data.items():
+            setattr(ticket, key, value)
+        await assignment.ensure_assignee_for_team(
+            user.organization_id,
+            new_team_id,
+            conversation_id=ticket.conversation_id,
+            ticket=ticket,
+            sync_linked_tickets=True,
+        )
+    elif (team_changing or user_in_payload) and ticket.conversation_id:
+        for key, value in data.items():
+            setattr(ticket, key, value)
+        await assignment.sync_manual_assignment(
+            user.organization_id,
+            conversation_id=ticket.conversation_id,
+            assigned_team_id=ticket.assigned_team_id,
+            assigned_user_id=ticket.assigned_user_id,
+            ticket=ticket,
+            sync_linked_tickets=True,
+        )
+    else:
+        for key, value in data.items():
+            setattr(ticket, key, value)
+
     if ticket.status == TicketStatus.RESOLVED and ticket.resolved_at is None:
         ticket.resolved_at = datetime.now(UTC)
     if ticket.status == TicketStatus.CLOSED and ticket.closed_at is None:

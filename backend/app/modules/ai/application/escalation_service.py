@@ -157,9 +157,20 @@ class EscalationService:
         await self.db.refresh(ticket)
 
         # Keep inbox Team view aligned with ticket routing (overwrite default Support)
-        if team_id and conv.assigned_team_id != team_id:
-            conv.assigned_team_id = team_id
-            await self.db.flush()
+        target_team_id = team_id or conv.assigned_team_id
+        from app.modules.assignment.application.service import AssignmentService
+
+        assignment = AssignmentService(self.db)
+        if target_team_id:
+            await assignment.ensure_assignee_for_team(
+                organization_id,
+                target_team_id,
+                conversation_id=state.conversation_id,
+                ticket=ticket,
+                sync_linked_tickets=True,
+            )
+        await self.db.refresh(conv)
+        await self.db.refresh(ticket)
 
         internal_note = self.render_handoff_note(package)
         from app.infrastructure.database.models import Message as MessageModel

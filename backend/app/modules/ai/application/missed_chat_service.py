@@ -81,12 +81,14 @@ class MissedChatService:
         conversation_id: str,
         organization_id: str,
     ) -> None:
-        """Mark conversation waiting when AI off and no agents online."""
-        availability = AvailabilityService(self.db)
-        if await availability.is_agent_available(organization_id):
-            return
+        """When AI is off: RR-assign from current team if ONLINE members exist; else WAITING."""
+        from app.modules.assignment.application.service import AssignmentService
+
         conv = await self.db.get(Conversation, conversation_id)
         if conv is None:
+            return
+        agent_id = await AssignmentService(self.db).auto_assign_if_needed(conversation_id, organization_id)
+        if agent_id is not None:
             return
         conv.status = ConversationStatus.WAITING_FOR_AGENT
         conversations = ConversationService(self.db)
