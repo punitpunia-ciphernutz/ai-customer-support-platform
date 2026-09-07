@@ -53,9 +53,20 @@ make up
 | Backend API + docs | http://localhost:8000/docs |
 | Health | http://localhost:8000/health |
 
-On backend start: `alembic upgrade head` (through **`0008_day6_automation`**) + seed (prompts, bot configs, channel configs, evaluation baseline, business hours, default automations, SLA policies).
+On backend start: `alembic upgrade head` (through **`0011_chat_widgets`**) + seed (prompts, bot configs, channel configs, evaluation baseline, business hours, default automations, SLA policies, **demo chat widget**).
 
 **Important:** The **worker** service must run for async AI replies. The **beat** service runs missed-chat timeout processing every 60 seconds and **SLA breach checks** every 60 seconds.
+
+## Embeddable chat widget (demo)
+
+1. Login as `admin@example.com` / `agent123!` → **Settings → Chat Widgets**
+2. Open the seeded **Demo Website Widget** (or create one). Note the `public_id` (`wgt_…`).
+3. Ensure status is **ACTIVE** and `allowed_domains` includes `localhost`.
+4. Copy the embed snippet (or open http://localhost:5173/widget-fixture.html after replacing `WGT_PUBLIC_ID`).
+5. Chat from the bubble → conversation appears in Inbox as **WEB_CHAT** with the same AI / ticket path.
+6. Internal test page remains at http://localhost:5173/chat (paste Customer UUID).
+
+Schema notes: [`docs/database/chat-widgets-schema.md`](database/chat-widgets-schema.md).
 
 ## 3. Migrate / seed / test
 

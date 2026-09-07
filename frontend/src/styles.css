@@ -1764,3 +1764,96 @@ a:hover {
   .stats-grid { grid-template-columns: 1fr 1fr; }
   .grid-2 { grid-template-columns: 1fr; }
 }
+
+/* Chat widget settings — color pickers + appearance preview */
+.widget-appearance-block {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+
+.widget-appearance-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.widget-appearance-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem 1rem;
+}
+
+.widget-color-field {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.widget-color-swatch {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.widget-color-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.widget-color-swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: 8px;
+}
+
+.widget-color-swatch::-moz-color-swatch {
+  border: none;
+  border-radius: 8px;
+}
+
+.widget-appearance-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.widget-appearance-preview-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 1rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 650;
+  box-shadow: var(--shadow);
+}
+
+.widget-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 700px) {
+  .widget-appearance-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1100px) {
+  .widget-detail-layout {
+    grid-template-columns: 1fr;
+  }
+}

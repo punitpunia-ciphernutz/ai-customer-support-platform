@@ -12,6 +12,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -25,6 +26,7 @@ __all__ = [
     "Base",
     "ChannelConfiguration",
     "ChannelType",
+    "ChatWidget",
     "Conversation",
     "AIControlMode",
     "ConversationStatus",
@@ -44,6 +46,7 @@ __all__ = [
     "Ticket",
     "TicketStatus",
     "User",
+    "WidgetStatus",
 ]
 
 
@@ -59,6 +62,12 @@ class ChannelType(StrEnum):
     WEB_CHAT = "WEB_CHAT"
     EMAIL = "EMAIL"
     FORM = "FORM"
+
+
+class WidgetStatus(StrEnum):
+    DRAFT = "DRAFT"
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
 
 
 class ConversationStatus(StrEnum):
@@ -202,7 +211,16 @@ class TeamMember(Base):
 
 class Customer(Base):
     __tablename__ = "customers"
-    __table_args__ = (Index("ix_customers_org_email", "organization_id", "email"),)
+    __table_args__ = (
+        Index("ix_customers_org_email", "organization_id", "email"),
+        Index(
+            "uq_customers_org_external_id",
+            "organization_id",
+            "external_id",
+            unique=True,
+            postgresql_where=text("external_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
@@ -221,12 +239,45 @@ class Customer(Base):
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="customer")
 
 
+class ChatWidget(Base):
+    __tablename__ = "chat_widgets"
+    __table_args__ = (
+        Index("ix_chat_widgets_org", "organization_id"),
+        Index("uq_chat_widgets_public_id", "public_id", unique=True),
+    )
+
+    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
+    public_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[WidgetStatus] = mapped_column(
+        Enum(WidgetStatus, name="widget_status"),
+        default=WidgetStatus.DRAFT,
+        nullable=False,
+    )
+    allowed_domains: Mapped[list[Any]] = mapped_column(JSONB, default=list)
+    appearance: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    welcome_message: Mapped[str] = mapped_column(Text, default="Hi! How can we help?")
+    offline_message: Mapped[str | None] = mapped_column(Text)
+    require_email: Mapped[bool] = mapped_column(default=False)
+    require_name: Mapped[bool] = mapped_column(default=False)
+    ai_settings: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    organization: Mapped[Organization] = relationship()
+    conversations: Mapped[list["Conversation"]] = relationship(back_populates="widget")
+
+
 class Conversation(Base):
     __tablename__ = "conversations"
 
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
     organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), nullable=False, index=True)
+    widget_id: Mapped[str | None] = mapped_column(ForeignKey("chat_widgets.id"), index=True)
     channel: Mapped[ChannelType] = mapped_column(Enum(ChannelType, name="channel_type"), nullable=False)
     status: Mapped[ConversationStatus] = mapped_column(
         Enum(ConversationStatus, name="conversation_status"), default=ConversationStatus.OPEN
@@ -247,6 +298,7 @@ class Conversation(Base):
 
     organization: Mapped[Organization] = relationship(back_populates="conversations")
     customer: Mapped[Customer] = relationship(back_populates="conversations")
+    widget: Mapped["ChatWidget | None"] = relationship(back_populates="conversations")
     messages: Mapped[list["Message"]] = relationship(back_populates="conversation", order_by="Message.created_at")
     participants: Mapped[list["Participant"]] = relationship(back_populates="conversation")
     tickets: Mapped[list["Ticket"]] = relationship(back_populates="conversation")

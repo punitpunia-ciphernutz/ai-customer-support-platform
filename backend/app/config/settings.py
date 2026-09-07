@@ -20,6 +20,9 @@ class Settings(BaseSettings):
 
     seed_agent_email: str = "agent@example.com"
     seed_agent_password: str = "agent123!"
+    visitor_token_expire_minutes: int = 1440  # 24h
+    widget_resume_days: int = 7
+    frontend_public_url: str = "http://localhost:5173"
 
     # Knowledge / embeddings + Gemini LLM (Day 2)
     gemini_api_key: str = ""

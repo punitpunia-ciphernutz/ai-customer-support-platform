@@ -102,6 +102,7 @@ export type Conversation = {
   id: string;
   organization_id: string;
   customer_id: string;
+  widget_id?: string | null;
   channel: ChannelType;
   status: ConversationStatus;
   priority: Priority;

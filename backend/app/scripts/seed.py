@@ -11,6 +11,7 @@ from app.config import get_settings
 from app.infrastructure.database.models import (
     ChannelConfiguration,
     ChannelType,
+    ChatWidget,
     Conversation,
     Organization,
     Role,
@@ -19,6 +20,7 @@ from app.infrastructure.database.models import (
     TeamMember,
     Ticket,
     User,
+    WidgetStatus,
 )
 from app.modules.ai.domain.models import (
     AgentAvailability,
@@ -379,6 +381,31 @@ def seed() -> None:
                         settings={"from_address": "support@acme.example"} if channel == ChannelType.EMAIL else {},
                     )
                 )
+
+        demo_widget = session.scalar(
+            select(ChatWidget).where(
+                ChatWidget.organization_id == org.id,
+                ChatWidget.name == "Demo Website Widget",
+            )
+        )
+        if demo_widget is None:
+            from app.modules.widgets.schemas import DEFAULT_APPEARANCE
+            from app.modules.widgets.service import generate_public_id
+
+            session.add(
+                ChatWidget(
+                    organization_id=org.id,
+                    public_id=generate_public_id(),
+                    name="Demo Website Widget",
+                    status=WidgetStatus.ACTIVE,
+                    allowed_domains=["localhost", "127.0.0.1"],
+                    appearance=dict(DEFAULT_APPEARANCE),
+                    welcome_message="Hi! How can we help?",
+                    offline_message="We're offline right now. Please try again later.",
+                    require_email=False,
+                    require_name=False,
+                )
+            )
 
         session.commit()
         agent_email = settings.seed_agent_email.lower()

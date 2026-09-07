@@ -20,6 +20,8 @@ from app.modules.notifications.api.routes import router as notifications_router
 from app.modules.teams.router import router as teams_router
 from app.modules.tickets.router import router as tickets_router
 from app.modules.users.router import router as users_router
+from app.modules.widgets.public_router import router as public_widgets_router
+from app.modules.widgets.router import router as widgets_router
 
 api_router = APIRouter()
 
@@ -46,3 +48,5 @@ api_router.include_router(automation_executions_router)
 api_router.include_router(business_hours_router)
 api_router.include_router(notifications_router)
 api_router.include_router(notification_preferences_router)
+api_router.include_router(widgets_router)
+api_router.include_router(public_widgets_router)

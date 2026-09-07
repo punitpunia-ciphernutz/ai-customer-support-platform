@@ -7,7 +7,14 @@ function senderLabel(type: string) {
   return type;
 }
 
-export function MessageBubble({ message }: { message: Message }) {
+export function MessageBubble({
+  message,
+  showDiagnostics = true,
+}: {
+  message: Message;
+  /** Agent inbox diagnostics (confidence, cost, delivery). Off for customer surfaces. */
+  showDiagnostics?: boolean;
+}) {
   const isSystem = message.sender_type === "SYSTEM";
 
   return (
@@ -17,7 +24,7 @@ export function MessageBubble({ message }: { message: Message }) {
       <div className="message-header">
         <span className="message-sender">
           {senderLabel(message.sender_type)}
-          {message.channel && message.sender_type === "CUSTOMER" && (
+          {showDiagnostics && message.channel && message.sender_type === "CUSTOMER" && (
             <span className="text-muted" style={{ marginLeft: "0.35rem", fontWeight: 400 }}>
               · {message.channel.replace(/_/g, " ")}
             </span>
@@ -43,10 +50,10 @@ export function MessageBubble({ message }: { message: Message }) {
           ))}
         </div>
       )}
-      {message.delivery_status && (
+      {showDiagnostics && message.delivery_status && (
         <div className="message-ai-tag">Delivery: {message.delivery_status}</div>
       )}
-      {message.sender_type === "AI" && message.metadata?.confidence != null && (
+      {showDiagnostics && message.sender_type === "AI" && message.metadata?.confidence != null && (
         <div className="message-ai-tag">
           AI Response · {Math.round(message.metadata.confidence * 100)}%
           {message.metadata.estimated_cost_usd != null && (

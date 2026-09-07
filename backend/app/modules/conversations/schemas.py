@@ -27,6 +27,7 @@ class ConversationOut(BaseModel):
     id: str
     organization_id: str
     customer_id: str
+    widget_id: str | None = None
     channel: ChannelType
     status: ConversationStatus
     priority: Priority

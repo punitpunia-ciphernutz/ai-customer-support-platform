@@ -8,7 +8,7 @@
 
 **Depends on:** Existing public Web Chat (`POST/GET /public/conversations…`), AI pipeline, response policy, escalation/tickets, per-channel `BotConfiguration`, `ChannelConfiguration` for `WEB_CHAT`.
 
-**Status:** PLAN ONLY — not implemented.
+**Status:** IMPLEMENTED (Phases 0–6). See `docs/database/chat-widgets-schema.md`, Settings → Chat Widgets, and `/widget.js` embed.
 
 ---
 

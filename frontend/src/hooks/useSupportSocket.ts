@@ -4,28 +4,38 @@ const WS_BASE = import.meta.env.VITE_WS_BASE_URL ?? "ws://localhost:8000/ws";
 
 type Handler = (event: { name?: string; payload?: unknown }) => void;
 
-/** Agent inbox: authenticated `/ws?token=…`. Public chat: `/ws/public`. */
+/** Agent inbox: authenticated `/ws?token=…`. Public chat: `/ws/public` (optional visitor token). */
 export function useSupportSocket({
   token,
   onEvent,
   publicSocket = false,
+  conversationId = null,
 }: {
   token: string | null;
   onEvent: Handler;
   publicSocket?: boolean;
+  conversationId?: string | null;
 }) {
   const handlerRef = useRef(onEvent);
   handlerRef.current = onEvent;
 
   useEffect(() => {
     let url: string;
-    if (publicSocket || !token) {
+    if (publicSocket) {
       const base = WS_BASE.replace(/\/ws$/, "/ws/public");
-      url = base.includes("/ws/public") ? base : `${WS_BASE}/public`;
+      const publicBase = base.includes("/ws/public") ? base : `${WS_BASE}/public`;
+      url = token ? `${publicBase}?token=${encodeURIComponent(token)}` : publicBase;
+    } else if (!token) {
+      return;
     } else {
       url = `${WS_BASE}?token=${encodeURIComponent(token)}`;
     }
     const ws = new WebSocket(url);
+    ws.onopen = () => {
+      if (conversationId && token && publicSocket && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "subscribe", conversation_id: conversationId }));
+      }
+    };
     ws.onmessage = (msg) => {
       try {
         const data = JSON.parse(msg.data as string);
@@ -41,5 +51,5 @@ export function useSupportSocket({
       window.clearInterval(ping);
       ws.close();
     };
-  }, [token, publicSocket]);
+  }, [token, publicSocket, conversationId]);
 }

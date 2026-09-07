@@ -47,3 +47,37 @@ class CustomerResolver:
             )
         )
         return result.scalar_one_or_none()
+
+    async def resolve_anonymous_visitor(
+        self,
+        organization_id: str,
+        *,
+        external_id: str,
+        name: str = "Visitor",
+        metadata: dict | None = None,
+    ) -> Customer:
+        result = await self.db.execute(
+            select(Customer).where(
+                Customer.organization_id == organization_id,
+                Customer.external_id == external_id,
+            )
+        )
+        customer = result.scalar_one_or_none()
+        if customer is not None:
+            if metadata:
+                merged = dict(customer.metadata_ or {})
+                merged.update(metadata)
+                customer.metadata_ = merged
+                await self.db.flush()
+            return customer
+
+        customer = Customer(
+            organization_id=organization_id,
+            name=name.strip() or "Visitor",
+            external_id=external_id,
+            metadata_=metadata or {},
+        )
+        self.db.add(customer)
+        await self.db.flush()
+        await self.db.refresh(customer)
+        return customer

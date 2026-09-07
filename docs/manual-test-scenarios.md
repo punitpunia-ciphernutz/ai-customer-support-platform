@@ -210,6 +210,47 @@ curl -s -X POST "$API/knowledge/search" \
 
 ---
 
+## 3b. Embeddable chat widget
+
+### TC-EW-01 — Dashboard create + snippet
+
+1. Login as admin → **Settings → Chat Widgets**
+2. Create or open a widget · set domains to include `localhost` · status **ACTIVE**
+3. Copy embed snippet
+
+**Expect**
+- [ ] Public ID starts with `wgt_`
+- [ ] Snippet references `/widget.js` and the public ID
+
+### TC-EW-02 — Fixture site round-trip
+
+1. Open http://localhost:5173/widget-fixture.html (replace `WGT_PUBLIC_ID` with seeded widget id)
+2. Click chat bubble → send `How do I reset my password?`
+3. Inbox shows a WEB_CHAT conversation (optionally with `widget_id`)
+
+**Expect**
+- [ ] Visitor session created without pasting a customer UUID
+- [ ] AI / agent path same as internal `/chat`
+
+### TC-EW-03 — Domain rejection
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" \
+  -H "X-Widget-Page-Host: evil.com" \
+  "$API/public/widgets/$WIDGET_PUBLIC_ID/config"
+```
+
+**Expect:** `403`
+
+### TC-EW-04 — Internal `/chat` still works
+
+1. Open http://localhost:5173/chat with seeded customer UUID
+2. Send a message
+
+**Expect:** unchanged legacy public API behavior
+
+---
+
 ## 3. Web chat — Autopilot + knowledge
 
 ### TC-WC-01 — Autopilot WITH knowledge (grounded reply)

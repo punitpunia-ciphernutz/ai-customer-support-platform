@@ -163,6 +163,21 @@ Each business area lives under `app/modules/<name>/`.
 
 **Change here for:** conversation status rules, assign/close logic, new channel adapter, public chat API.
 
+#### Chat widgets — `modules/widgets/` (embeddable WEB_CHAT)
+
+| File | Role |
+|------|------|
+| `router.py` | Agent CRUD `/widgets` + embed snippet + preview token |
+| `public_router.py` | Public config/session/messages for embed clients |
+| `service.py` | Widget CRUD, domain checks, visitor session, wraps `ConversationService` |
+| `domain_guard.py` | Origin/host allowlist matching |
+| `visitor_token.py` | Visitor/preview JWTs (`typ=visitor`) |
+| `rate_limit.py` | Sliding-window limits on public session/message |
+
+**Principle:** Widgets are a delivery surface for `ChannelType.WEB_CHAT`. Do not add a second AI pipeline.
+
+**Change here for:** embed security, visitor identity, widget appearance/status. Schema: `docs/database/chat-widgets-schema.md`.
+
 #### Tickets — `modules/tickets/`
 
 | File | Role |
@@ -198,7 +213,7 @@ Each business area lives under `app/modules/<name>/`.
 
 | File | Role |
 |------|------|
-| `ws.py` | WebSocket `/ws` (JWT required) and `/ws/public`; Redis → broadcast |
+| `ws.py` | `/ws` (agent JWT); `/ws/public` (legacy open or visitor-scoped with token); `/ws/widget` alias |
 
 **Change here for:** WS auth rules, which clients get which events.
 

@@ -145,7 +145,7 @@ export function WebChatPage() {
           </p>
         )}
         {visibleMessages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
+          <MessageBubble key={m.id} message={m} showDiagnostics={false} />
         ))}
         {sending && <AiRespondingIndicator />}
         {!sending && awaitingAi && <AiRespondingIndicator />}

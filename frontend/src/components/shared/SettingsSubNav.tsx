@@ -5,6 +5,7 @@ const LINKS = [
   { to: "/settings", label: "AI Support", exact: true },
   { to: "/settings/business-hours", label: "Business Hours" },
   { to: "/settings/channels", label: "Channels" },
+  { to: "/settings/widgets", label: "Chat Widgets" },
 ];
 
 export function SettingsSubNav() {

@@ -16,6 +16,8 @@ import { TicketsPage } from "@/features/tickets/TicketsPage";
 import { TeamsPage } from "@/features/teams/TeamsPage";
 import { ChannelSettingsPage } from "@/features/settings/ChannelSettingsPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
+import { WidgetsPage } from "@/features/widgets/WidgetsPage";
+import { WidgetDetailPage } from "@/features/widgets/WidgetDetailPage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -68,6 +70,8 @@ export function AppRouter() {
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/settings/business-hours" element={<BusinessHoursPage />} />
                 <Route path="/settings/channels" element={<ChannelSettingsPage />} />
+                <Route path="/settings/widgets" element={<WidgetsPage />} />
+                <Route path="/settings/widgets/:widgetId" element={<WidgetDetailPage />} />
                 <Route path="/app/settings/channels" element={<ChannelSettingsPage />} />
               </Routes>
             </AppShell>

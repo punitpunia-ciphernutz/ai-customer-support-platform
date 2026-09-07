@@ -59,7 +59,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
           <a href="/chat" target="_blank" rel="noreferrer" className="sidebar-link">
             <IconExternal size={18} />
-            Web Chat
+            Internal Web Chat (test)
           </a>
         </nav>
 

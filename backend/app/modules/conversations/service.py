@@ -106,7 +106,13 @@ class ConversationService:
             initial_message=body.initial_message,
         )
 
-    async def create_public_conversation(self, body: ConversationCreate) -> Conversation:
+    async def create_public_conversation(
+        self,
+        body: ConversationCreate,
+        *,
+        widget_id: str | None = None,
+        message_metadata: dict[str, Any] | None = None,
+    ) -> Conversation:
         customer = await self.db.execute(select(Customer).where(Customer.id == body.customer_id))
         cust = customer.scalar_one_or_none()
         if cust is None:
@@ -119,7 +125,7 @@ class ConversationService:
                 "customer_id": cust.id,
                 "customer_email": cust.email,
                 "customer_name": cust.name,
-                "metadata": {},
+                "metadata": message_metadata or {},
             }
         )
         incoming = await adapter.identify_customer(incoming, db=self.db)
@@ -129,6 +135,7 @@ class ConversationService:
             priority=body.priority,
             subject=body.subject,
             initial_message=body.initial_message,
+            widget_id=widget_id,
         )
 
     async def update_conversation(
@@ -633,6 +640,7 @@ class ConversationService:
         priority: Any,
         subject: str | None,
         initial_message: str | None,
+        widget_id: str | None = None,
     ) -> Conversation:
         customer_id = incoming.customer_id
         if not customer_id:
@@ -645,6 +653,7 @@ class ConversationService:
             status=ConversationStatus.OPEN,
             priority=priority,
             subject=subject,
+            widget_id=widget_id,
         )
         self.db.add(conversation)
         await self.db.flush()
@@ -681,7 +690,11 @@ class ConversationService:
             DomainEvent(
                 name="conversation.created",
                 organization_id=incoming.organization_id,
-                payload={"conversation_id": conversation.id, "customer_id": customer_id},
+                payload={
+                    "conversation_id": conversation.id,
+                    "customer_id": customer_id,
+                    "widget_id": widget_id,
+                },
             )
         )
         return conversation
