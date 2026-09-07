@@ -866,6 +866,43 @@ a:hover {
   border-bottom: none;
 }
 
+/* Stable column widths — prevent layout jump across paginated rows */
+.customers-table {
+  table-layout: fixed;
+}
+
+.customers-table .col-customer { width: 22%; }
+.customers-table .col-contact { width: 22%; }
+.customers-table .col-company { width: 14%; }
+.customers-table .col-conversations { width: 10%; }
+.customers-table .col-tickets { width: 8%; }
+.customers-table .col-created { width: 14%; }
+.customers-table .col-id { width: 10%; }
+
+.customers-table th,
+.customers-table td {
+  overflow: hidden;
+}
+
+.customers-table .cell-with-avatar,
+.customers-table .cell-stack {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.customers-table .truncate {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.customers-table .flex.truncate {
+  display: flex;
+  min-width: 0;
+}
+
 .table-footer {
   display: flex;
   justify-content: space-between;

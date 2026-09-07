@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -121,7 +121,20 @@ export function CustomersPage() {
   }, [customers.data, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const safePage = Math.min(page, totalPages);
+  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  const visiblePages = useMemo(() => {
+    const windowSize = Math.min(3, totalPages);
+    let start = Math.max(1, safePage - Math.floor(windowSize / 2));
+    const end = Math.min(totalPages, start + windowSize - 1);
+    start = Math.max(1, end - windowSize + 1);
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  }, [safePage, totalPages]);
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage);
+  }, [page, safePage]);
 
   const copyId = (id: string) => {
     void navigator.clipboard.writeText(id);
@@ -209,7 +222,16 @@ export function CustomersPage() {
         )}
 
         {!customers.isLoading && filtered.length > 0 && (
-          <table className="data-table">
+          <table className="data-table customers-table">
+            <colgroup>
+              <col className="col-customer" />
+              <col className="col-contact" />
+              <col className="col-company" />
+              <col className="col-conversations" />
+              <col className="col-tickets" />
+              <col className="col-created" />
+              <col className="col-id" />
+            </colgroup>
             <thead>
               <tr>
                 <th>Customer</th>
@@ -241,26 +263,30 @@ export function CustomersPage() {
                     <div className="cell-with-avatar">
                       <Avatar name={c.name} size="sm" />
                       <div className="cell-stack">
-                        <span className="cell-primary">{c.name}</span>
+                        <span className="cell-primary truncate">{c.name}</span>
                       </div>
                     </div>
                   </td>
                   <td>
                     <div className="cell-stack">
                       {c.email && (
-                        <span className="text-sm flex items-center gap-2">
-                          <IconMail /> {c.email}
+                        <span className="text-sm flex items-center gap-2 truncate">
+                          <IconMail /> <span className="truncate">{c.email}</span>
                         </span>
                       )}
                       {c.phone && (
-                        <span className="text-sm text-muted flex items-center gap-2">
-                          <IconPhone /> {c.phone}
+                        <span className="text-sm text-muted flex items-center gap-2 truncate">
+                          <IconPhone /> <span className="truncate">{c.phone}</span>
                         </span>
                       )}
                       {!c.email && !c.phone && <span className="text-muted">—</span>}
                     </div>
                   </td>
-                  <td>{c.company_name ?? <span className="text-muted">—</span>}</td>
+                  <td>
+                    <span className="truncate">
+                      {c.company_name ?? <span className="text-muted">—</span>}
+                    </span>
+                  </td>
                   <td>
                     <span className={`badge-count ${convCount(c.id) ? "green" : "muted"}`}>
                       {convCount(c.id)}
@@ -271,7 +297,9 @@ export function CustomersPage() {
                       {ticketCount(c.id)}
                     </span>
                   </td>
-                  <td className="text-sm text-muted">{formatDate(c.created_at)}</td>
+                  <td className="text-sm text-muted">
+                    <span className="truncate">{formatDate(c.created_at)}</span>
+                  </td>
                   <td>
                     <button
                       type="button"
@@ -295,18 +323,18 @@ export function CustomersPage() {
         {filtered.length > 0 && (
           <div className="table-footer">
             <span>
-              Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, filtered.length)} of{" "}
+              Showing {(safePage - 1) * PAGE_SIZE + 1} to {Math.min(safePage * PAGE_SIZE, filtered.length)} of{" "}
               {filtered.length} customers
             </span>
             <div className="table-pagination">
-              <button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+              <button type="button" disabled={safePage <= 1} onClick={() => setPage((p) => p - 1)}>
                 ‹
               </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              {visiblePages.map((p) => (
                 <button
                   key={p}
                   type="button"
-                  className={p === page ? "active" : ""}
+                  className={p === safePage ? "active" : ""}
                   onClick={() => setPage(p)}
                 >
                   {p}
@@ -314,7 +342,7 @@ export function CustomersPage() {
               ))}
               <button
                 type="button"
-                disabled={page >= totalPages}
+                disabled={safePage >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
               >
                 ›
