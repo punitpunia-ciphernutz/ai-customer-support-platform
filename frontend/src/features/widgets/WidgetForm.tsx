@@ -114,7 +114,7 @@ export function WidgetForm({
         >
           <option value="DRAFT">Draft</option>
           <option value="ACTIVE">Active</option>
-          <option value="INACTIVE">Inactive</option>
+          <option value="INACTIVE">Inactive (Archive)</option>
         </select>
       </label>
 
