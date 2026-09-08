@@ -5,6 +5,8 @@ import { useTheme } from "@/app/ThemeContext";
 import { NotificationBell } from "@/features/notifications/NotificationBell";
 import {
   IconBook,
+  IconChevronLeft,
+  IconChevronRight,
   IconExternal,
   IconInbox,
   IconLogout,
@@ -30,15 +32,38 @@ const NAV = [
   { to: "/settings", label: "Settings", icon: IconSettings },
 ];
 
+const SIDEBAR_COLLAPSED_KEY = "sidebar_collapsed";
+
+function readSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const { theme, setTheme } = useTheme();
   const location = useLocation();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
   const profileRef = useRef<HTMLDivElement>(null);
 
   const isActive = (to: string, exact?: boolean) =>
     exact ? location.pathname === to : location.pathname.startsWith(to);
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -59,11 +84,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [profileOpen]);
 
   return (
-    <div className="shell">
-      <aside className="shell-sidebar">
-        <div className="sidebar-brand">
-          <IconSupport size={22} />
-          Support
+    <div className={cn("shell", collapsed && "is-sidebar-collapsed")}>
+      <aside className={cn("shell-sidebar", collapsed && "is-collapsed")} aria-label="Primary">
+        <div className="sidebar-brand-row">
+          <div className="sidebar-brand">
+            <IconSupport size={22} />
+            <span className="sidebar-brand-text">Support</span>
+          </div>
+          <button
+            type="button"
+            className="sidebar-collapse-btn"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+            onClick={toggleCollapsed}
+          >
+            {collapsed ? <IconChevronRight size={16} /> : <IconChevronLeft size={16} />}
+          </button>
         </div>
 
         <nav className="sidebar-nav">
@@ -72,14 +108,21 @@ export function AppShell({ children }: { children: ReactNode }) {
               key={to}
               to={to}
               className={cn("sidebar-link", isActive(to, exact) && "active")}
+              aria-label={label}
             >
               <Icon size={18} />
-              {label}
+              <span className="sidebar-link-label">{label}</span>
             </Link>
           ))}
-          <a href="/chat" target="_blank" rel="noreferrer" className="sidebar-link">
+          <a
+            href="/chat"
+            target="_blank"
+            rel="noreferrer"
+            className="sidebar-link"
+            aria-label="Internal Web Chat (test)"
+          >
             <IconExternal size={18} />
-            Internal Web Chat (test)
+            <span className="sidebar-link-label">Internal Web Chat (test)</span>
           </a>
         </nav>
 
@@ -93,6 +136,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   aria-label="Account menu"
                   aria-expanded={profileOpen}
                   aria-haspopup="menu"
+                  title={collapsed ? user.full_name : undefined}
                   onClick={() => setProfileOpen((v) => !v)}
                 >
                   <span className="sidebar-profile-avatar-wrap">
@@ -143,14 +187,18 @@ export function AppShell({ children }: { children: ReactNode }) {
                 )}
               </div>
             )}
-
-            <div className="sidebar-footer-actions">
-              <NotificationBell compact />
-            </div>
           </div>
         </div>
       </aside>
-      <main className="shell-main">{children}</main>
+
+      <div className="shell-content">
+        <header className="shell-header">
+          <div className="shell-header-actions">
+            <NotificationBell compact placement="below" />
+          </div>
+        </header>
+        <main className="shell-main">{children}</main>
+      </div>
     </div>
   );
 }

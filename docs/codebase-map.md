@@ -383,7 +383,7 @@ frontend/
 │   │   └── providers.tsx     # QueryClient + BrowserRouter + AuthProvider
 │   ├── features/             # One folder per product area (pages)
 │   ├── components/
-│   │   ├── shared/AppShell.tsx   # Sidebar nav layout
+│   │   ├── shared/AppShell.tsx   # Global header + collapsible sidebar shell
 │   │   └── ui/                   # Shared primitives (skeleton)
 │   ├── services/api/client.ts    # fetch wrapper + JWT
 │   ├── hooks/useSupportSocket.ts # WebSocket helper
@@ -418,7 +418,7 @@ Nav links live in `components/shared/AppShell.tsx`.
 |--------|----------------|----------|
 | `features/auth/` | Login form; `AuthContext` holds user + token | `/auth/login`, `/auth/me`, `/auth/logout` |
 | `features/inbox/` | Agent inbox: Team/Mine filters, thread, reply, assign | `/conversations`, `/messages`, `/users`, `/teams` + WS |
-| `features/notifications/` | AppShell notification bell | `/notifications` + WS |
+| `features/notifications/` | Global header notification bell | `/notifications` + WS |
 | `features/customers/` | Create/list customers | `/customers` |
 | `features/conversations/` | Customer-facing web chat | `/public/conversations...` + `/ws/public` |
 | `features/knowledge/` | Sources list, add TEXT/PDF/URL, status, delete | `/knowledge/...` |

@@ -18,9 +18,16 @@ type ToastState = {
 };
 
 type PanelCoords = {
-  bottom: number;
+  top?: number;
+  bottom?: number;
   left: number;
   width: number;
+};
+
+type NotificationBellProps = {
+  compact?: boolean;
+  /** Where the panel opens relative to the bell button. */
+  placement?: "above" | "below";
 };
 
 function playNotifyChime() {
@@ -50,7 +57,10 @@ function playNotifyChime() {
   }
 }
 
-export function NotificationBell({ compact = false }: { compact?: boolean }) {
+export function NotificationBell({
+  compact = false,
+  placement = "above",
+}: NotificationBellProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -116,14 +126,23 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
     if (!btn) return;
     const rect = btn.getBoundingClientRect();
     const width = Math.min(352, window.innerWidth - 16);
-    let left = compact ? rect.left : rect.left;
-    if (compact) {
-      // Prefer opening into the main content area from the bell.
-      left = Math.min(rect.left, window.innerWidth - width - 8);
-      left = Math.max(8, left);
-    } else {
-      left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+    let left =
+      placement === "below"
+        ? rect.right - width
+        : compact
+          ? Math.min(rect.left, window.innerWidth - width - 8)
+          : rect.left;
+    left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+
+    if (placement === "below") {
+      setCoords({
+        top: rect.bottom + 8,
+        left,
+        width,
+      });
+      return;
     }
+
     setCoords({
       bottom: window.innerHeight - rect.top + 8,
       left,
@@ -144,7 +163,7 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("scroll", onResize, true);
     };
-  }, [open, compact]);
+  }, [open, compact, placement]);
 
   useEffect(() => {
     if (!open) return;
@@ -215,16 +234,21 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
   const panel = open && coords && (
     <div
       ref={panelRef}
-      className={cn("notification-panel", compact && "is-fixed")}
+      className={cn(
+        "notification-panel",
+        "is-fixed",
+        placement === "below" && "is-below",
+      )}
       role="dialog"
       aria-label="Notifications"
       style={{
         position: "fixed",
         left: coords.left,
-        bottom: coords.bottom,
         width: coords.width,
         right: "auto",
-        top: "auto",
+        ...(placement === "below"
+          ? { top: coords.top, bottom: "auto" }
+          : { bottom: coords.bottom, top: "auto" }),
       }}
     >
       <div className="notification-panel-header">
@@ -281,11 +305,20 @@ export function NotificationBell({ compact = false }: { compact?: boolean }) {
 
   return (
     <>
-      <div className={cn("notification-bell", compact && "is-compact")} ref={rootRef}>
+      <div
+        className={cn(
+          "notification-bell",
+          compact && "is-compact",
+          placement === "below" && "is-header",
+        )}
+        ref={rootRef}
+      >
         <button
           type="button"
           className={cn(
-            compact ? "sidebar-footer-icon-btn notification-bell-btn" : "sidebar-link notification-bell-btn",
+            compact
+              ? "shell-icon-btn notification-bell-btn"
+              : "sidebar-link notification-bell-btn",
             unread > 0 && "has-unread",
             ringing && "is-ringing",
             open && "is-open",
