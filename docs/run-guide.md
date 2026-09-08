@@ -230,7 +230,7 @@ docker compose exec backend alembic current
 curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/v1/automations
 ```
 
-Expect seeded: Route Billing, Angry Customers, AI Escalation, Reopen on reply, Missed Chat.
+Expect seeded: Route Billing, Tag Login, Tag Refund, Tag Bug, Angry Customers, AI Escalation, Reopen on reply, Missed Chat.
 
 ### Agent availability (status enum)
 

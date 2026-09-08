@@ -18,6 +18,7 @@ from app.modules.knowledge.api.routes import router as knowledge_router
 from app.modules.notifications.api.routes import preferences_router as notification_preferences_router
 from app.modules.notifications.api.routes import router as notifications_router
 from app.modules.teams.router import router as teams_router
+from app.modules.tags.router import router as tags_router
 from app.modules.tickets.router import router as tickets_router
 from app.modules.users.router import router as users_router
 from app.modules.widgets.public_router import router as public_widgets_router
@@ -35,6 +36,7 @@ api_router.include_router(auth_router)
 api_router.include_router(customers_router)
 api_router.include_router(conversations_router)
 api_router.include_router(tickets_router)
+api_router.include_router(tags_router)
 api_router.include_router(teams_router)
 api_router.include_router(users_router)
 api_router.include_router(knowledge_router)

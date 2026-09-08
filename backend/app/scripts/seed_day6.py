@@ -97,6 +97,47 @@ def seed_default_automations(session: Session, organization_id: str) -> None:
             ],
         },
         {
+            "name": "Tag Login",
+            "description": "Auto-tag ACCOUNT_ACCESS intents as login",
+            "priority": 21,
+            "trigger": {"type": AutomationTriggerType.MESSAGE_RECEIVED.value},
+            "conditions": {
+                "logic": "AND",
+                "conditions": [
+                    {"field": "intent", "operator": ConditionOperator.EQUALS.value, "value": "ACCOUNT_ACCESS"}
+                ],
+            },
+            "actions": [{"type": ActionType.ADD_TAG.value, "value": "login"}],
+        },
+        {
+            "name": "Tag Refund",
+            "description": "Auto-tag REFUND intents as refund",
+            "priority": 22,
+            "trigger": {"type": AutomationTriggerType.MESSAGE_RECEIVED.value},
+            "conditions": {
+                "logic": "AND",
+                "conditions": [{"field": "intent", "operator": ConditionOperator.EQUALS.value, "value": "REFUND"}],
+            },
+            "actions": [{"type": ActionType.ADD_TAG.value, "value": "refund"}],
+        },
+        {
+            "name": "Tag Bug",
+            "description": "Auto-tag BUG_REPORT / TECHNICAL_ISSUE intents as bug",
+            "priority": 23,
+            "trigger": {"type": AutomationTriggerType.MESSAGE_RECEIVED.value},
+            "conditions": {
+                "logic": "AND",
+                "conditions": [
+                    {
+                        "field": "intent",
+                        "operator": ConditionOperator.IN.value,
+                        "value": ["BUG_REPORT", "TECHNICAL_ISSUE"],
+                    }
+                ],
+            },
+            "actions": [{"type": ActionType.ADD_TAG.value, "value": "bug"}],
+        },
+        {
             "name": "Angry Customers",
             "priority": 30,
             "trigger": {"type": AutomationTriggerType.MESSAGE_RECEIVED.value},
@@ -151,6 +192,7 @@ def seed_default_automations(session: Session, organization_id: str) -> None:
             Automation(
                 organization_id=organization_id,
                 name=spec["name"],
+                description=spec.get("description"),
                 enabled=True,
                 trigger=spec["trigger"],
                 conditions=spec["conditions"],

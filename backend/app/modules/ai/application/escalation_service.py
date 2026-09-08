@@ -156,6 +156,13 @@ class EscalationService:
         await self.db.flush()
         await self.db.refresh(ticket)
 
+        # Inherit existing conversation tags onto the new ticket.
+        from app.modules.tags.application.service import TagService
+
+        tag_service = TagService(self.db)
+        for tag_name in await tag_service.list_conversation_tags(state.conversation_id):
+            await tag_service.add_ticket_tag(organization_id, ticket.id, tag_name)
+
         # Keep inbox Team view aligned with ticket routing (overwrite default Support)
         target_team_id = team_id or conv.assigned_team_id
         from app.modules.assignment.application.service import AssignmentService

@@ -185,8 +185,20 @@ Each business area lives under `app/modules/<name>/`.
 
 | File | Role |
 |------|------|
-| `router.py` | Ticket CRUD + `view=mine\|team\|all\|unassigned` + team ACL |
-| `schemas.py` | Ticket DTOs |
+| `router.py` | Ticket CRUD + `view=mine\|team\|all\|unassigned` + `tag=` filter + team ACL |
+| `schemas.py` | Ticket DTOs (`tags: string[]` on `TicketOut`) |
+| `serialize.py` | `ticket_to_out` with tag names |
+
+#### Tags — `modules/tags/`
+
+| File | Role |
+|------|------|
+| `domain/models.py` | `Tag`, `ConversationTag`, `TicketTag` |
+| `application/service.py` | get_or_create, add/remove/list, batch maps, ticket↔conversation sync |
+| `schemas.py` | Tag DTOs |
+| `router.py` | `GET /tags`; `DELETE /tags/{name}` (org-wide); ticket/conversation tag nest routes |
+
+**UI:** `features/tickets/TicketsPage.tsx`, `features/inbox/InboxPage.tsx`, shared `components/tags/TagEditor.tsx`.
 
 #### Teams — `modules/teams/`
 

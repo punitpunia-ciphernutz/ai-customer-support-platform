@@ -8,6 +8,7 @@ import type {
   Conversation,
   Customer,
   Message,
+  OrgTag,
   Priority,
   Ticket,
   TicketStatus,
@@ -27,6 +28,7 @@ import {
   TableSearchBar,
 } from "@/components/ui";
 import { IconChevronLeft, IconPlus, IconTicket } from "@/components/ui/icons";
+import { TagChips, TagEditor, TagFilterDropdown } from "@/components/tags/TagEditor";
 import { cn } from "@/utils/cn";
 import {
   AiSummaryDrawer,
@@ -47,6 +49,7 @@ export function TicketsPage() {
   const deepLinkId = searchParams.get("t");
   const [selectedId, setSelectedId] = useState<string | null>(deepLinkId);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -62,6 +65,11 @@ export function TicketsPage() {
   const tickets = useQuery({
     queryKey: ["tickets", ticketView],
     queryFn: () => api<Ticket[]>(`/tickets?view=${ticketView}`),
+  });
+
+  const orgTags = useQuery({
+    queryKey: ["tags"],
+    queryFn: () => api<OrgTag[]>("/tags"),
   });
 
   const conversations = useQuery({
@@ -89,6 +97,8 @@ export function TicketsPage() {
     onEvent: (event) => {
       if (event.name?.startsWith("ticket.")) {
         void qc.invalidateQueries({ queryKey: ["tickets"] });
+        void qc.invalidateQueries({ queryKey: ["tags"] });
+        void qc.invalidateQueries({ queryKey: ["conversations"] });
       }
     },
   });
@@ -99,25 +109,39 @@ export function TicketsPage() {
     return customers.data?.find((c) => c.id === conv.customer_id)?.name ?? "Customer";
   };
 
+  const availableTags = useMemo(() => {
+    const fromTickets = new Set<string>();
+    for (const t of tickets.data ?? []) {
+      for (const tag of t.tags ?? []) fromTickets.add(tag);
+    }
+    for (const t of orgTags.data ?? []) fromTickets.add(t.name);
+    return [...fromTickets].sort();
+  }, [tickets.data, orgTags.data]);
+
   const filtered = useMemo(() => {
     let list = tickets.data ?? [];
     if (statusFilter !== "all") {
       list = list.filter((t) => t.status === statusFilter);
     }
+    if (tagFilter) {
+      list = list.filter((t) => (t.tags ?? []).includes(tagFilter));
+    }
     const q = search.toLowerCase().trim();
     if (q) {
       list = list.filter((t) => {
         const name = customerName(t.conversation_id).toLowerCase();
+        const tagHit = (t.tags ?? []).some((tag) => tag.includes(q));
         return (
           name.includes(q) ||
           t.status.toLowerCase().replace(/_/g, " ").includes(q) ||
           t.priority.toLowerCase().includes(q) ||
-          t.id.toLowerCase().includes(q)
+          t.id.toLowerCase().includes(q) ||
+          tagHit
         );
       });
     }
     return list;
-  }, [tickets.data, statusFilter, search, conversations.data, customers.data]); // eslint-disable-line react-hooks/exhaustive-deps -- customerName uses conv/customer maps
+  }, [tickets.data, statusFilter, tagFilter, search, conversations.data, customers.data]); // eslint-disable-line react-hooks/exhaustive-deps -- customerName uses conv/customer maps
 
   useEffect(() => {
     if (!deepLinkId) return;
@@ -157,6 +181,12 @@ export function TicketsPage() {
   const teamName = (id: string | null) =>
     id ? (teams.data?.find((t) => t.id === id)?.name ?? "Unknown") : "No team";
 
+  const invalidateTags = () => {
+    void qc.invalidateQueries({ queryKey: ["tickets"] });
+    void qc.invalidateQueries({ queryKey: ["tags"] });
+    void qc.invalidateQueries({ queryKey: ["conversations"] });
+  };
+
   const createTicket = useMutation({
     mutationFn: () =>
       api<Ticket>("/tickets", {
@@ -174,7 +204,7 @@ export function TicketsPage() {
       setSelectedId(ticket.id);
       setSaveMsg("Ticket created.");
       setSaveErr(null);
-      void qc.invalidateQueries({ queryKey: ["tickets"] });
+      invalidateTags();
     },
     onError: (e) => {
       setSaveErr(e instanceof ApiError ? e.message : "Failed to create ticket.");
@@ -195,6 +225,54 @@ export function TicketsPage() {
     },
     onError: (e) => {
       setSaveErr(e instanceof ApiError ? e.message : "Failed to update ticket.");
+      setSaveMsg(null);
+    },
+  });
+
+  const addTag = useMutation({
+    mutationFn: (name: string) =>
+      api<Ticket>(`/tickets/${selectedId}/tags`, {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      }),
+    onSuccess: () => {
+      setSaveMsg("Tag added.");
+      setSaveErr(null);
+      invalidateTags();
+    },
+    onError: (e) => {
+      setSaveErr(e instanceof ApiError ? e.message : "Failed to add tag.");
+      setSaveMsg(null);
+    },
+  });
+
+  const removeTag = useMutation({
+    mutationFn: (name: string) =>
+      api<Ticket>(`/tickets/${selectedId}/tags/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      setSaveMsg("Tag removed.");
+      setSaveErr(null);
+      invalidateTags();
+    },
+    onError: (e) => {
+      setSaveErr(e instanceof ApiError ? e.message : "Failed to remove tag.");
+      setSaveMsg(null);
+    },
+  });
+
+  const deleteOrgTag = useMutation({
+    mutationFn: (name: string) =>
+      api<void>(`/tags/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: (_data, name) => {
+      if (tagFilter === name) setTagFilter(null);
+      setSaveMsg("Tag deleted everywhere.");
+      setSaveErr(null);
+      invalidateTags();
+    },
+    onError: (e) => {
+      setSaveErr(e instanceof ApiError ? e.message : "Failed to delete tag.");
       setSaveMsg(null);
     },
   });
@@ -224,17 +302,24 @@ export function TicketsPage() {
           {saveMsg && <Alert type="success">{saveMsg}</Alert>}
           {saveErr && <Alert type="error">{saveErr}</Alert>}
 
-          <div className="filter-pills mb-4">
-            {(["team", "mine", "unassigned", ...(isOrgAdmin ? (["all"] as TicketView[]) : [])] as TicketView[]).map((v) => (
-              <button
-                key={v}
-                type="button"
-                className={cn("filter-pill", ticketView === v && "active")}
-                onClick={() => setTicketView(v)}
-              >
-                {v === "team" ? "Team" : v === "mine" ? "Mine" : v === "unassigned" ? "Unassigned" : "All"}
-              </button>
-            ))}
+          <div className="inbox-filter-bar mb-4">
+            <div className="filter-pills">
+              {(["team", "mine", "unassigned", ...(isOrgAdmin ? (["all"] as TicketView[]) : [])] as TicketView[]).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  className={cn("filter-pill", ticketView === v && "active")}
+                  onClick={() => setTicketView(v)}
+                >
+                  {v === "team" ? "Team" : v === "mine" ? "Mine" : v === "unassigned" ? "Unassigned" : "All"}
+                </button>
+              ))}
+            </div>
+            <TagFilterDropdown
+              availableTags={availableTags}
+              value={tagFilter}
+              onChange={setTagFilter}
+            />
           </div>
           <div className="filter-pills mb-4">
             <button
@@ -273,8 +358,8 @@ export function TicketsPage() {
             {!tickets.isLoading && !filtered.length && (
               <EmptyState
                 message={
-                  search.trim()
-                    ? "No tickets match your search."
+                  search.trim() || tagFilter
+                    ? "No tickets match your filters."
                     : "No tickets yet. AI escalations create tickets automatically, or create one manually."
                 }
               />
@@ -286,6 +371,7 @@ export function TicketsPage() {
                     <th>Customer</th>
                     <th>Status</th>
                     <th>Priority</th>
+                    <th>Tags</th>
                     <th>Team</th>
                     <th>Assignee</th>
                     <th>Created</th>
@@ -326,6 +412,9 @@ export function TicketsPage() {
                       </td>
                       <td>
                         <span className={statusClass(t.priority.toLowerCase())}>{t.priority}</span>
+                      </td>
+                      <td>
+                        <TagChips tags={t.tags ?? []} emptyLabel="—" />
                       </td>
                       <td>{teamName(t.assigned_team_id)}</td>
                       <td>{userName(t.assigned_user_id)}</td>
@@ -374,6 +463,9 @@ export function TicketsPage() {
                     <span className={statusClass(selected.status.toLowerCase())}>{selected.status.replace(/_/g, " ")}</span>
                     <span className={statusClass(selected.priority.toLowerCase())}>{selected.priority}</span>
                   </div>
+                  <div style={{ marginTop: "0.5rem" }}>
+                    <TagChips tags={selected.tags ?? []} />
+                  </div>
                 </div>
               </div>
               {handoffHasContent(handoffPackage) && (
@@ -401,6 +493,18 @@ export function TicketsPage() {
               <div><dt>Assignee</dt><dd>{userName(selected.assigned_user_id)}</dd></div>
               <div><dt>Team</dt><dd>{teamName(selected.assigned_team_id)}</dd></div>
             </dl>
+
+            <div className="card mb-6">
+              <h3 className="section-title">Tags</h3>
+              <TagEditor
+                tags={selected.tags ?? []}
+                suggestions={(orgTags.data ?? []).map((t) => t.name)}
+                pending={addTag.isPending || removeTag.isPending || deleteOrgTag.isPending}
+                onAdd={(name) => addTag.mutate(name)}
+                onRemove={(name) => removeTag.mutate(name)}
+                onDeleteGlobal={(name) => deleteOrgTag.mutate(name)}
+              />
+            </div>
 
             <div className="card">
               <h3 className="section-title">Update Ticket</h3>
@@ -563,4 +667,3 @@ export function TicketsPage() {
     </div>
   );
 }
-

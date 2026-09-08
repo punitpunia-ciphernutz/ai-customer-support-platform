@@ -84,18 +84,61 @@ async def _set_status(db: AsyncSession, ctx: AutomationContext, action: dict[str
 
 async def _add_tag(db: AsyncSession, ctx: AutomationContext, action: dict[str, Any]) -> dict[str, Any]:
     value = action.get("value") or action.get("config", {}).get("tag")
-    if not ctx.conversation_id or not value:
+    if not value:
         return {"skipped": True}
-    changed = await TagService(db).add_conversation_tag(ctx.organization_id, ctx.conversation_id, str(value))
-    return {"changed": changed, "tag": value}
+    tag_name = str(value)
+    service = TagService(db)
+    changed = False
+
+    # Prefer conversation tagging; fall back to ticket-only contexts.
+    conversation_id = ctx.conversation_id
+    if not conversation_id and ctx.ticket_id:
+        ticket = await db.get(Ticket, ctx.ticket_id)
+        if ticket is not None:
+            conversation_id = ticket.conversation_id
+            ctx.conversation_id = conversation_id
+
+    if conversation_id:
+        changed = await service.add_conversation_tag(ctx.organization_id, conversation_id, tag_name)
+        # Keep every linked ticket in sync (including ctx.ticket_id when present).
+        await service.sync_tag_to_conversation_tickets(ctx.organization_id, conversation_id, tag_name)
+    elif ctx.ticket_id:
+        changed = await service.add_ticket_tag(ctx.organization_id, ctx.ticket_id, tag_name)
+    else:
+        return {"skipped": True}
+
+    normalized = tag_name.strip().lower()
+    if normalized not in ctx.tags:
+        ctx.tags = sorted([*ctx.tags, normalized])
+    return {"changed": changed, "tag": tag_name}
 
 
 async def _remove_tag(db: AsyncSession, ctx: AutomationContext, action: dict[str, Any]) -> dict[str, Any]:
     value = action.get("value") or action.get("config", {}).get("tag")
-    if not ctx.conversation_id or not value:
+    if not value:
         return {"skipped": True}
-    changed = await TagService(db).remove_conversation_tag(ctx.organization_id, ctx.conversation_id, str(value))
-    return {"changed": changed, "tag": value}
+    tag_name = str(value)
+    service = TagService(db)
+    changed = False
+
+    conversation_id = ctx.conversation_id
+    if not conversation_id and ctx.ticket_id:
+        ticket = await db.get(Ticket, ctx.ticket_id)
+        if ticket is not None:
+            conversation_id = ticket.conversation_id
+            ctx.conversation_id = conversation_id
+
+    if conversation_id:
+        changed = await service.remove_conversation_tag(ctx.organization_id, conversation_id, tag_name)
+        await service.unsync_tag_from_conversation_tickets(ctx.organization_id, conversation_id, tag_name)
+    elif ctx.ticket_id:
+        changed = await service.remove_ticket_tag(ctx.organization_id, ctx.ticket_id, tag_name)
+    else:
+        return {"skipped": True}
+
+    normalized = tag_name.strip().lower()
+    ctx.tags = [t for t in ctx.tags if t != normalized]
+    return {"changed": changed, "tag": tag_name}
 
 
 async def _create_ticket(db: AsyncSession, ctx: AutomationContext, action: dict[str, Any]) -> dict[str, Any]:
@@ -133,6 +176,11 @@ async def _create_ticket(db: AsyncSession, ctx: AutomationContext, action: dict[
     db.add(ticket)
     await db.flush()
     ctx.ticket_id = ticket.id
+    if ctx.conversation_id:
+        # Inherit conversation tags so ticket view stays aligned with Inbox.
+        tags = TagService(db)
+        for tag_name in await tags.list_conversation_tags(ctx.conversation_id):
+            await tags.add_ticket_tag(ctx.organization_id, ticket.id, tag_name)
     if ticket.assigned_team_id:
         await AssignmentService(db).ensure_assignee_for_team(
             ctx.organization_id,

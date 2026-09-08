@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/services/api/client";
 import { Link, useSearchParams } from "react-router-dom";
-import type { ChannelType, Conversation, Customer, Message, UserListItem } from "@/types";
+import type { ChannelType, Conversation, Customer, Message, OrgTag, UserListItem } from "@/types";
 import { AgentAvailabilityControl } from "@/features/agents/AgentAvailabilityControl";
 import { useAuth } from "@/features/auth/AuthContext";
 import { AiRespondingIndicator, MessageBubble } from "@/features/conversations/MessageBubble";
@@ -10,6 +10,7 @@ import { useSupportSocket } from "@/hooks/useSupportSocket";
 import { useInboxAwaitingAi } from "@/hooks/useAwaitingAiResponse";
 import { Alert, Avatar, EmptyState, LoadingState, PageHeader, StatCard, TableSearchBar } from "@/components/ui";
 import { IconChevronLeft, IconMail, IconMessage } from "@/components/ui/icons";
+import { TagChips, TagEditor, TagFilterDropdown } from "@/components/tags/TagEditor";
 import { cn } from "@/utils/cn";
 import { formatCost, formatRelative, statusClass } from "@/utils/format";
 import type { AIUsageSummary } from "@/types";
@@ -39,6 +40,7 @@ export function InboxPage() {
   const [view, setView] = useState<View>(isOrgAdmin ? "all" : "team");
   const [selectedId, setSelectedId] = useState<string | null>(deepLinkId);
   const [search, setSearch] = useState("");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [reply, setReply] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   const [aiPanelOpen, setAiPanelOpen] = useState(true);
@@ -47,6 +49,11 @@ export function InboxPage() {
   const conversations = useQuery({
     queryKey: ["conversations", view],
     queryFn: () => api<Conversation[]>(`/conversations?view=${view}`),
+  });
+
+  const orgTags = useQuery({
+    queryKey: ["tags"],
+    queryFn: () => api<OrgTag[]>("/tags"),
   });
 
   useEffect(() => {
@@ -97,6 +104,7 @@ export function InboxPage() {
       ) {
         void qc.invalidateQueries({ queryKey: ["conversations"] });
         void qc.invalidateQueries({ queryKey: ["tickets"] });
+        void qc.invalidateQueries({ queryKey: ["tags"] });
         if (selectedId) {
           void qc.invalidateQueries({ queryKey: ["messages", selectedId] });
           void qc.invalidateQueries({ queryKey: ["conversation-ai-usage", selectedId] });
@@ -118,8 +126,20 @@ export function InboxPage() {
   const customerName = (id: string) =>
     customers.data?.find((c) => c.id === id)?.name ?? "Customer";
 
+  const availableTags = useMemo(() => {
+    const names = new Set<string>();
+    for (const c of conversations.data ?? []) {
+      for (const tag of c.tags ?? []) names.add(tag);
+    }
+    for (const t of orgTags.data ?? []) names.add(t.name);
+    return [...names].sort();
+  }, [conversations.data, orgTags.data]);
+
   const filtered = useMemo(() => {
-    const list = conversations.data ?? [];
+    let list = conversations.data ?? [];
+    if (tagFilter) {
+      list = list.filter((c) => (c.tags ?? []).includes(tagFilter));
+    }
     const q = search.toLowerCase().trim();
     if (!q) return list;
     return list.filter((c) => {
@@ -127,6 +147,7 @@ export function InboxPage() {
       const email = (customerEmail(c.customer_id) ?? "").toLowerCase();
       const subject = (c.subject ?? "").toLowerCase();
       const channel = CHANNEL_BADGE[c.channel].toLowerCase();
+      const tagHit = (c.tags ?? []).some((tag) => tag.includes(q));
       return (
         name.includes(q) ||
         email.includes(q) ||
@@ -134,10 +155,11 @@ export function InboxPage() {
         channel.includes(q) ||
         c.status.toLowerCase().includes(q) ||
         c.priority.toLowerCase().includes(q) ||
-        c.id.toLowerCase().includes(q)
+        c.id.toLowerCase().includes(q) ||
+        tagHit
       );
     });
-  }, [conversations.data, search, customers.data]); // eslint-disable-line react-hooks/exhaustive-deps -- customerName/email use customers map
+  }, [conversations.data, search, tagFilter, customers.data]); // eslint-disable-line react-hooks/exhaustive-deps -- customerName/email use customers map
 
   const latestAiMeta = useMemo(() => {
     const aiMsgs = (messages.data ?? []).filter(
@@ -222,6 +244,38 @@ export function InboxPage() {
     },
   });
 
+  const invalidateTagQueries = () => {
+    void qc.invalidateQueries({ queryKey: ["conversations"] });
+    void qc.invalidateQueries({ queryKey: ["tickets"] });
+    void qc.invalidateQueries({ queryKey: ["tags"] });
+  };
+
+  const addTag = useMutation({
+    mutationFn: (name: string) =>
+      api<Conversation>(`/conversations/${selectedId}/tags`, {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      }),
+    onSuccess: () => invalidateTagQueries(),
+  });
+
+  const removeTag = useMutation({
+    mutationFn: (name: string) =>
+      api<Conversation>(`/conversations/${selectedId}/tags/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => invalidateTagQueries(),
+  });
+
+  const deleteOrgTag = useMutation({
+    mutationFn: (name: string) =>
+      api<void>(`/tags/${encodeURIComponent(name)}`, { method: "DELETE" }),
+    onSuccess: (_data, name) => {
+      if (tagFilter === name) setTagFilter(null);
+      invalidateTagQueries();
+    },
+  });
+
   const bottomRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -278,17 +332,24 @@ export function InboxPage() {
           />
         </div>
 
-        <div className="filter-pills mb-4">
-          {(["team", "mine", "unassigned", "web_chat", "email", ...(isOrgAdmin ? (["all"] as View[]) : [])] as View[]).map((v) => (
-            <button
-              key={v}
-              type="button"
-              className={cn("filter-pill", view === v && "active")}
-              onClick={() => setView(v)}
-            >
-              {VIEW_LABELS[v]}
-            </button>
-          ))}
+        <div className="inbox-filter-bar mb-4">
+          <div className="filter-pills">
+            {(["team", "mine", "unassigned", "web_chat", "email", ...(isOrgAdmin ? (["all"] as View[]) : [])] as View[]).map((v) => (
+              <button
+                key={v}
+                type="button"
+                className={cn("filter-pill", view === v && "active")}
+                onClick={() => setView(v)}
+              >
+                {VIEW_LABELS[v]}
+              </button>
+            ))}
+          </div>
+          <TagFilterDropdown
+            availableTags={availableTags}
+            value={tagFilter}
+            onChange={setTagFilter}
+          />
         </div>
 
         <div className="table-wrap">
@@ -310,8 +371,8 @@ export function InboxPage() {
           {!conversations.isLoading && !filtered.length && (
             <EmptyState
               message={
-                search.trim()
-                  ? "No conversations match your search."
+                search.trim() || tagFilter
+                  ? "No conversations match your filters."
                   : "No conversations yet. Create a customer and open Web Chat."
               }
             />
@@ -324,6 +385,7 @@ export function InboxPage() {
                   <th>Channel</th>
                   <th>Status</th>
                   <th>Priority</th>
+                  <th>Tags</th>
                   <th>Subject</th>
                   <th>Team</th>
                   <th>Assignee</th>
@@ -365,6 +427,9 @@ export function InboxPage() {
                     </td>
                     <td>
                       <span className={statusClass(c.priority.toLowerCase())}>{c.priority}</span>
+                    </td>
+                    <td>
+                      <TagChips tags={c.tags ?? []} emptyLabel="—" />
                     </td>
                     <td>{c.subject ?? <span className="text-muted">—</span>}</td>
                     <td>{teamName(c.assigned_team_id)}</td>
@@ -424,6 +489,9 @@ export function InboxPage() {
                 {" · "}
                 <Link to={`/customers/${selected.customer_id}`}>Customer 360</Link>
               </p>
+              <div style={{ marginTop: "0.5rem" }}>
+                <TagChips tags={selected.tags ?? []} />
+              </div>
             </div>
           </div>
           <div className="thread-actions">
@@ -507,6 +575,17 @@ export function InboxPage() {
             )}
           </div>
         </header>
+
+        <div style={{ padding: "0.75rem 1.25rem", borderBottom: "1px solid var(--border)", background: "var(--bg-card)" }}>
+          <TagEditor
+            tags={selected.tags ?? []}
+            suggestions={(orgTags.data ?? []).map((t) => t.name)}
+            pending={addTag.isPending || removeTag.isPending || deleteOrgTag.isPending}
+            onAdd={(name) => addTag.mutate(name)}
+            onRemove={(name) => removeTag.mutate(name)}
+            onDeleteGlobal={(name) => deleteOrgTag.mutate(name)}
+          />
+        </div>
 
         <div className="messages-area">
           {messages.isLoading && <LoadingState message="Loading messages…" />}

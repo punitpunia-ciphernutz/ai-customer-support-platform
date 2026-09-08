@@ -16,18 +16,40 @@ from app.modules.conversations.schemas import (
     PublicAIResponseCheck,
     PublicMessageCreate,
 )
+from app.modules.conversations.serialize import conversation_to_out
 from app.modules.conversations.service import ConversationService
+from app.modules.tags.application.service import TagService
+from app.modules.tickets.schemas import TicketOut
+from app.modules.tickets.serialize import ticket_to_out
 
 router = APIRouter(tags=["conversations"])
+
+
+async def _conversations_with_tags(
+    db: AsyncSession, conversations: list[Conversation]
+) -> list[ConversationOut]:
+    tag_map = await TagService(db).map_effective_conversation_tags([c.id for c in conversations])
+    return [conversation_to_out(c, tag_map.get(c.id, [])) for c in conversations]
+
+
+async def _conversation_with_tags(db: AsyncSession, conversation: Conversation) -> ConversationOut:
+    tag_map = await TagService(db).map_effective_conversation_tags([conversation.id])
+    return conversation_to_out(conversation, tag_map.get(conversation.id, []))
 
 
 @router.get("/conversations", response_model=list[ConversationOut])
 async def list_conversations(
     view: str = Query("all"),
+    tag: list[str] | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(CONVERSATIONS_READ)),
-) -> list[Conversation]:
-    return await ConversationService(db).list_conversations(user, view=view)
+) -> list[ConversationOut]:
+    conversations = await ConversationService(db).list_conversations(user, view=view)
+    outs = await _conversations_with_tags(db, conversations)
+    tag_filters = [t.strip().lower() for t in (tag or []) if t and t.strip()]
+    if tag_filters:
+        outs = [c for c in outs if all(t in c.tags for t in tag_filters)]
+    return outs
 
 
 @router.post("/conversations", response_model=ConversationOut, status_code=201)
@@ -35,8 +57,9 @@ async def create_conversation(
     body: ConversationCreate,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
-) -> Conversation:
-    return await ConversationService(db).create_conversation(user, body)
+) -> ConversationOut:
+    conversation = await ConversationService(db).create_conversation(user, body)
+    return await _conversation_with_tags(db, conversation)
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationOut)
@@ -44,8 +67,9 @@ async def get_conversation(
     conversation_id: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(CONVERSATIONS_READ)),
-) -> Conversation:
-    return await ConversationService(db).get_conversation(user.organization_id, conversation_id)
+) -> ConversationOut:
+    conversation = await ConversationService(db).get_conversation(user.organization_id, conversation_id)
+    return await _conversation_with_tags(db, conversation)
 
 
 @router.patch("/conversations/{conversation_id}", response_model=ConversationOut)
@@ -54,8 +78,9 @@ async def update_conversation(
     body: ConversationUpdate,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
-) -> Conversation:
-    return await ConversationService(db).update_conversation(user, conversation_id, body)
+) -> ConversationOut:
+    conversation = await ConversationService(db).update_conversation(user, conversation_id, body)
+    return await _conversation_with_tags(db, conversation)
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=list[MessageOut])
@@ -166,8 +191,9 @@ async def takeover_conversation(
     conversation_id: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
-) -> Conversation:
-    return await ConversationService(db).takeover(user, conversation_id)
+) -> ConversationOut:
+    conversation = await ConversationService(db).takeover(user, conversation_id)
+    return await _conversation_with_tags(db, conversation)
 
 
 @router.post("/conversations/{conversation_id}/return-to-ai", response_model=ConversationOut)
@@ -175,20 +201,23 @@ async def return_conversation_to_ai(
     conversation_id: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
-) -> Conversation:
-    return await ConversationService(db).return_to_ai(user, conversation_id)
+) -> ConversationOut:
+    conversation = await ConversationService(db).return_to_ai(user, conversation_id)
+    return await _conversation_with_tags(db, conversation)
 
 
-@router.post("/conversations/{conversation_id}/ticket", status_code=201)
+@router.post("/conversations/{conversation_id}/ticket", status_code=201, response_model=TicketOut)
 async def create_conversation_ticket(
     conversation_id: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(CONVERSATIONS_WRITE)),
-):
-    from app.modules.tickets.schemas import TicketOut
-
+) -> TicketOut:
     ticket = await ConversationService(db).create_ticket_from_conversation(user, conversation_id)
-    return TicketOut.model_validate(ticket)
+    service = TagService(db)
+    for tag_name in await service.list_conversation_tags(conversation_id):
+        await service.add_ticket_tag(user.organization_id, ticket.id, tag_name)
+    tags = await service.list_ticket_tags(ticket.id)
+    return ticket_to_out(ticket, tags)
 
 
 @router.post("/conversations/{conversation_id}/suggestions/{message_id}/accept", response_model=MessageOut)

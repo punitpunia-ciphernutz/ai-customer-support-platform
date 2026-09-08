@@ -37,6 +37,7 @@ class ConversationOut(BaseModel):
     ai_control_mode: AIControlMode = AIControlMode.AI_CONTROL
     created_at: datetime
     updated_at: datetime
+    tags: list[str] = []
 
     model_config = {"from_attributes": True}
 

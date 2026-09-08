@@ -31,6 +31,70 @@ async def test_add_tag_is_idempotent() -> None:
 
 
 @pytest.mark.asyncio
+async def test_add_tag_syncs_to_linked_ticket() -> None:
+    async with AsyncSessionLocal() as session:
+        org_id = (await session.execute(select(Organization.id).limit(1))).scalar_one()
+        customer = Customer(organization_id=org_id, name="Tag Sync")
+        session.add(customer)
+        await session.flush()
+        conv = Conversation(organization_id=org_id, customer_id=customer.id, channel="WEB_CHAT")
+        session.add(conv)
+        await session.flush()
+        ticket = Ticket(
+            organization_id=org_id,
+            customer_id=customer.id,
+            conversation_id=conv.id,
+            title="Existing",
+        )
+        session.add(ticket)
+        await session.flush()
+
+        ctx = AutomationContext(
+            organization_id=org_id,
+            conversation_id=conv.id,
+            ticket_id=ticket.id,
+            customer_id=customer.id,
+        )
+        result = await execute_action(session, ctx, {"type": ActionType.ADD_TAG.value, "value": "urgent"})
+        assert result["changed"] is True
+
+        tags = TagService(session)
+        assert "urgent" in await tags.list_conversation_tags(conv.id)
+        assert "urgent" in await tags.list_ticket_tags(ticket.id)
+
+        remove = await execute_action(session, ctx, {"type": ActionType.REMOVE_TAG.value, "value": "urgent"})
+        assert remove["changed"] is True
+        assert "urgent" not in await tags.list_conversation_tags(conv.id)
+        assert "urgent" not in await tags.list_ticket_tags(ticket.id)
+
+
+@pytest.mark.asyncio
+async def test_create_ticket_inherits_conversation_tags() -> None:
+    async with AsyncSessionLocal() as session:
+        org_id = (await session.execute(select(Organization.id).limit(1))).scalar_one()
+        customer = Customer(organization_id=org_id, name="Tag Inherit")
+        session.add(customer)
+        await session.flush()
+        conv = Conversation(organization_id=org_id, customer_id=customer.id, channel="WEB_CHAT")
+        session.add(conv)
+        await session.flush()
+
+        tags = TagService(session)
+        await tags.add_conversation_tag(org_id, conv.id, "billing")
+        await tags.add_conversation_tag(org_id, conv.id, "refund")
+
+        ctx = AutomationContext(organization_id=org_id, conversation_id=conv.id, customer_id=customer.id)
+        result = await execute_action(
+            session,
+            ctx,
+            {"type": ActionType.CREATE_TICKET.value, "config": {"title": "Inherit tags"}},
+        )
+        ticket_id = result["ticket_id"]
+        ticket_tags = await tags.list_ticket_tags(ticket_id)
+        assert set(ticket_tags) == {"billing", "refund"}
+
+
+@pytest.mark.asyncio
 async def test_create_ticket_dedupes_by_conversation() -> None:
     async with AsyncSessionLocal() as session:
         org_id = (await session.execute(select(Organization.id).limit(1))).scalar_one()

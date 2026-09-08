@@ -33,5 +33,6 @@ class TicketOut(BaseModel):
     created_at: datetime
     resolved_at: datetime | None
     closed_at: datetime | None
+    tags: list[str] = []
 
     model_config = {"from_attributes": True}

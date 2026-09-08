@@ -112,6 +112,7 @@ export type Conversation = {
   ai_control_mode?: AIControlMode;
   created_at: string;
   updated_at: string;
+  tags?: string[];
 };
 
 export type AIConfidenceComponents = {
@@ -200,6 +201,15 @@ export type Ticket = {
   created_at: string;
   resolved_at: string | null;
   closed_at: string | null;
+  tags?: string[];
+};
+
+export type OrgTag = {
+  id: string;
+  organization_id: string;
+  name: string;
+  color: string | null;
+  created_at: string;
 };
 
 export type AppNotification = {

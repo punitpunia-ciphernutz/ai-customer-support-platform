@@ -11,8 +11,11 @@ from app.infrastructure.database.models import ActorType, Conversation, Ticket, 
 from app.infrastructure.database.session import get_db
 from app.infrastructure.events import DomainEvent, event_bus
 from app.modules.auth.permissions import TICKETS_READ, TICKETS_WRITE
+from app.modules.tags.application.service import TagService
+from app.modules.tags.domain.models import Tag, TicketTag
 from app.modules.teams.access import is_org_admin, ticket_visible_to_user, user_team_ids
 from app.modules.tickets.schemas import TicketCreate, TicketOut, TicketUpdate
+from app.modules.tickets.serialize import ticket_to_out
 
 router = APIRouter(prefix="/tickets", tags=["tickets"])
 
@@ -20,9 +23,10 @@ router = APIRouter(prefix="/tickets", tags=["tickets"])
 @router.get("", response_model=list[TicketOut])
 async def list_tickets(
     view: str = Query(default="all"),
+    tag: list[str] | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(TICKETS_READ)),
-) -> list[Ticket]:
+) -> list[TicketOut]:
     # Ensure role loaded for admin check
     if user.role is None:
         loaded = await db.scalar(select(User).where(User.id == user.id).options(selectinload(User.role)))
@@ -48,9 +52,22 @@ async def list_tickets(
     elif view != "all":
         raise HTTPException(status_code=400, detail="Invalid view")
 
+    tag_filters = [t.strip().lower() for t in (tag or []) if t and t.strip()]
+    if tag_filters:
+        for tag_name in tag_filters:
+            stmt = stmt.where(
+                Ticket.id.in_(
+                    select(TicketTag.ticket_id)
+                    .join(Tag, Tag.id == TicketTag.tag_id)
+                    .where(Tag.organization_id == user.organization_id, Tag.name == tag_name)
+                )
+            )
+
     stmt = stmt.order_by(Ticket.created_at.desc())
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    tickets = list(result.scalars().all())
+    tag_map = await TagService(db).map_ticket_tags([t.id for t in tickets])
+    return [ticket_to_out(t, tag_map.get(t.id, [])) for t in tickets]
 
 
 @router.post("", response_model=TicketOut, status_code=201)
@@ -58,7 +75,7 @@ async def create_ticket(
     body: TicketCreate,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(TICKETS_WRITE)),
-) -> Ticket:
+) -> TicketOut:
     conv = await db.execute(
         select(Conversation).where(
             Conversation.id == body.conversation_id,
@@ -140,7 +157,12 @@ async def create_ticket(
             payload={"ticket_id": ticket.id, "conversation_id": conversation.id},
         )
     )
-    return ticket
+    # Inherit conversation tags onto the new ticket so tags stay aligned.
+    service = TagService(db)
+    for tag_name in await service.list_conversation_tags(conversation.id):
+        await service.add_ticket_tag(user.organization_id, ticket.id, tag_name)
+    tags = await service.list_ticket_tags(ticket.id)
+    return ticket_to_out(ticket, tags)
 
 
 @router.get("/{ticket_id}", response_model=TicketOut)
@@ -148,8 +170,10 @@ async def get_ticket(
     ticket_id: str,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(TICKETS_READ)),
-) -> Ticket:
-    return await _get_ticket(db, user, ticket_id)
+) -> TicketOut:
+    ticket = await _get_ticket(db, user, ticket_id)
+    tags = await TagService(db).list_ticket_tags(ticket.id)
+    return ticket_to_out(ticket, tags)
 
 
 @router.patch("/{ticket_id}", response_model=TicketOut)
@@ -158,7 +182,7 @@ async def update_ticket(
     body: TicketUpdate,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_permission(TICKETS_WRITE)),
-) -> Ticket:
+) -> TicketOut:
     ticket = await _get_ticket(db, user, ticket_id)
     old = {
         "status": ticket.status.value,
@@ -254,7 +278,8 @@ async def update_ticket(
                 payload={"ticket_id": ticket.id},
             )
         )
-    return ticket
+    tags = await TagService(db).list_ticket_tags(ticket.id)
+    return ticket_to_out(ticket, tags)
 
 
 async def _get_ticket(db: AsyncSession, user: User, ticket_id: str) -> Ticket:

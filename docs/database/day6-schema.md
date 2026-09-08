@@ -49,7 +49,35 @@ Org-level support hours with IANA timezone. Schedule: `day_of_week` 0=Mon..6=Sun
 
 ### tags / conversation_tags / ticket_tags
 
-Unique `(organization_id, name)` on tags. M2M join tables for conversations and tickets.
+Org-scoped reusable tag catalog plus M2M join tables.
+
+| Table | Purpose |
+|-------|---------|
+| `tags` | Catalog: unique `(organization_id, name)` (names stored lowercase), optional `color` |
+| `conversation_tags` | M2M conversation ↔ tag, unique `(conversation_id, tag_id)` |
+| `ticket_tags` | M2M ticket ↔ tag, unique `(ticket_id, tag_id)` |
+
+**API behavior**
+
+- `GET /tags` — org catalog
+- `DELETE /tags/{name}` — permanently delete catalog tag and all conversation/ticket links (`tickets.write`)
+- `GET|POST /tickets/{id}/tags`, `DELETE /tickets/{id}/tags/{name}` — ticket tag mutations (ACL via ticket visibility; `tickets.read` / `tickets.write`)
+- `GET|POST /conversations/{id}/tags`, `DELETE /conversations/{id}/tags/{name}` — conversation tag mutations (`conversations.read` / `conversations.write`)
+- `TicketOut.tags` / `ConversationOut.tags` — `tags: string[]` on list/detail payloads
+- List filters: `GET /tickets?tag=billing&tag=urgent` (AND), `GET /conversations?tag=…` (AND on effective tags)
+
+**Sync**
+
+Agent tag changes mirror across linked entities: ticket ↔ conversation, and conversation ↔ all tickets for that conversation. Automation `ADD_TAG` / `REMOVE_TAG` also sync conversation tags to all linked tickets (and ticket-only contexts resolve the conversation when possible). Conversation list/detail `tags` are the **effective union** of conversation tags and tags on linked tickets. New tickets (API create, automation `CREATE_TICKET`, AI/agent escalation) inherit existing conversation tags.
+
+**Default intent → tag seeds** (`seed_day6.seed_default_automations`)
+
+| Intent | Tag | Automation |
+|--------|-----|------------|
+| `BILLING` | `billing` | Route Billing (also routes team/priority) |
+| `ACCOUNT_ACCESS` | `login` | Tag Login |
+| `REFUND` | `refund` | Tag Refund |
+| `BUG_REPORT` or `TECHNICAL_ISSUE` | `bug` | Tag Bug |
 
 ### sla_policies / sla_timers
 
