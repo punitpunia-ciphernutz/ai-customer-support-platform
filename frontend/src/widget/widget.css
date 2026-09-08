@@ -11,15 +11,25 @@ body,
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
+#root {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .widget-frame {
   display: flex;
   flex-direction: column;
+  flex: 1;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
   background: #f4f6f8;
   color: #0f172a;
 }
 
 .widget-frame-header {
+  flex-shrink: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -57,8 +67,12 @@ body,
 }
 
 .widget-frame-messages {
-  flex: 1;
-  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 1rem 0.9rem 0.75rem;
   display: flex;
   flex-direction: column;
@@ -166,6 +180,7 @@ body,
 }
 
 .widget-frame-composer {
+  flex-shrink: 0;
   display: flex;
   gap: 0.55rem;
   padding: 0.8rem;

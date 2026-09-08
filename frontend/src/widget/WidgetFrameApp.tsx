@@ -35,7 +35,8 @@ export function WidgetFrameApp() {
   const [prechatDone, setPrechatDone] = useState(false);
   const [sending, setSending] = useState(false);
   const [ticketNotice, setTicketNotice] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
   const checkedRef = useRef<Set<string>>(new Set());
 
   const primary = config?.appearance?.primary_color ?? "#3B66F5";
@@ -132,7 +133,21 @@ export function WidgetFrameApp() {
         `/public/widgets/${widgetId}/conversations/${cid}/messages`,
         { pageHost, visitorToken: token, previewToken }
       );
-      setMessages(list);
+      // Avoid re-render/scroll churn when the 2s poll returns the same messages.
+      setMessages((prev) => {
+        if (
+          prev.length === list.length &&
+          prev.every(
+            (m, i) =>
+              m.id === list[i]?.id &&
+              m.content === list[i]?.content &&
+              m.created_at === list[i]?.created_at
+          )
+        ) {
+          return prev;
+        }
+        return list;
+      });
     },
     [widgetId, pageHost, previewToken]
   );
@@ -204,8 +219,17 @@ export function WidgetFrameApp() {
     return () => window.clearTimeout(timer);
   }, [pending, conversationId, session, widgetId, pageHost, loadMessages]);
 
+  const onMessagesScroll = () => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickToBottomRef.current = distanceFromBottom <= 80;
+  };
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = messagesRef.current;
+    if (!el || !stickToBottomRef.current) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [messages, awaitingAi, sending]);
 
   const startPrechat = async () => {
@@ -229,6 +253,7 @@ export function WidgetFrameApp() {
   const send = async () => {
     if (!text.trim() || !config) return;
     if (config.status !== "ACTIVE" && !previewToken) return;
+    stickToBottomRef.current = true;
     setError(null);
     setTicketNotice(null);
     setSending(true);
@@ -345,7 +370,7 @@ export function WidgetFrameApp() {
         </div>
       ) : (
         <>
-          <div className="widget-frame-messages">
+          <div className="widget-frame-messages" ref={messagesRef} onScroll={onMessagesScroll}>
             {config?.welcome_message && visibleMessages.length === 0 && (
               <div className="widget-welcome">{config.welcome_message}</div>
             )}
@@ -355,7 +380,6 @@ export function WidgetFrameApp() {
               <MessageBubble key={m.id} message={m} showDiagnostics={false} />
             ))}
             {(awaitingAi || sending) && <AiRespondingIndicator />}
-            <div ref={bottomRef} />
           </div>
           <form
             className="widget-frame-composer"

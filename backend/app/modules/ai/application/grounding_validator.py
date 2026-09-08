@@ -30,7 +30,7 @@ class GroundingValidator:
 
         knowledge_text = ""
         if docs:
-            knowledge_text = "\n\n".join(f"### {d.title}\n{d.content[:800]}" for d in docs)
+            knowledge_text = "\n\n".join(f"### {d.title}\n{d.content}" for d in docs)
         else:
             knowledge_text = "\n".join(
                 f"- {s.title}" for s in sources if hasattr(s, "title")

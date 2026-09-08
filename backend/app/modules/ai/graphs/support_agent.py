@@ -248,7 +248,7 @@ async def run_support_agent_graph(
             validator = GroundingValidator(provider)
             if prompt_service is not None:
                 knowledge_text = "\n\n".join(
-                    f"### {d.title}\n{d.content[:800]}" for d in s.retrieved_documents
+                    f"### {d.title}\n{d.content}" for d in s.retrieved_documents
                 )
                 prompt = await prompt_service.render_grounding_prompt(s.draft_response, knowledge_text)
                 result = await validator.validate_with_prompt(
