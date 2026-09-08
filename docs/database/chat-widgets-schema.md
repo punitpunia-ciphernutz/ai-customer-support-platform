@@ -59,9 +59,18 @@ Partial unique index `uq_customers_org_external_id` on `(organization_id, extern
 
 | Status | Public config | Messaging |
 |--------|---------------|-----------|
-| `DRAFT` | 404 | Rejected |
+| `DRAFT` | 404 (OK with valid Settings preview token) | Rejected (unless preview token for session APIs) |
 | `ACTIVE` | OK (domain checked; ≥1 domain required) | OK if WEB_CHAT enabled |
 | `INACTIVE` | OK (offline UX) | 403 |
+
+## Settings Live Preview
+
+Admin Settings loads `widget-frame.html?…&preview=true&preview_token=…`. With `preview=true` the embed:
+
+- Does **not** read/write visitor `localStorage` or load real conversation messages
+- Renders a static sample thread (welcome + sample user/agent bubbles)
+- Accepts `postMessage` `WIDGET_PREVIEW_UPDATE` for unsaved appearance/welcome drafts
+- Does not persist messages to the database
 
 ## Relations
 

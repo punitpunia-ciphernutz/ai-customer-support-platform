@@ -12,6 +12,11 @@ import {
   WidgetApiError,
 } from "@/widget/api";
 import type { PublicWidgetConfig, WidgetSession } from "@/widget/types";
+import {
+  buildPreviewMessages,
+  WIDGET_PREVIEW_UPDATE,
+  type WidgetPreviewDraft,
+} from "@/widget/previewMock";
 
 function isCustomerVisible(m: Message) {
   return !m.metadata?.internal;
@@ -23,11 +28,13 @@ function params() {
     widgetId: q.get("widget_id") ?? "",
     pageHost: q.get("page_host") ?? "localhost",
     previewToken: q.get("preview_token"),
+    /** Settings Live Preview sandbox — no real sessions or conversation history. */
+    isPreview: q.get("preview") === "true",
   };
 }
 
 export function WidgetFrameApp() {
-  const { widgetId, pageHost: initialHost, previewToken } = useMemo(() => params(), []);
+  const { widgetId, pageHost: initialHost, previewToken, isPreview } = useMemo(() => params(), []);
   const [pageHost, setPageHost] = useState(initialHost);
   const [pageUrl, setPageUrl] = useState<string | undefined>();
   const [config, setConfig] = useState<PublicWidgetConfig | null>(null);
@@ -54,18 +61,49 @@ export function WidgetFrameApp() {
   const textColor = config?.appearance?.text_color ?? "#FFFFFF";
   const radius = config?.appearance?.border_radius_px ?? 16;
 
+  const applyPreviewDraft = useCallback((draft: WidgetPreviewDraft) => {
+    setConfig((prev) => {
+      if (!prev && !draft.name && !draft.welcome_message && !draft.appearance) return prev;
+      const base: PublicWidgetConfig = prev ?? {
+        public_id: widgetId,
+        name: draft.name ?? "Support",
+        status: "ACTIVE",
+        welcome_message: draft.welcome_message ?? "Hi! How can we help?",
+        offline_message: null,
+        require_name: false,
+        require_email: false,
+        appearance: {},
+      };
+      return {
+        ...base,
+        name: draft.name ?? base.name,
+        welcome_message: draft.welcome_message ?? base.welcome_message,
+        appearance: {
+          ...base.appearance,
+          ...draft.appearance,
+        },
+      };
+    });
+    if (draft.welcome_message !== undefined) {
+      setMessages(buildPreviewMessages(draft.welcome_message));
+    }
+  }, [widgetId]);
+
   useEffect(() => {
-    window.parent.postMessage({ type: "WIDGET_READY", widgetId }, "*");
+    window.parent.postMessage({ type: "WIDGET_READY", widgetId, isPreview }, "*");
     const onMessage = (event: MessageEvent) => {
       const data = event.data || {};
       if (data.type === "WIDGET_INIT" && data.host) {
         setPageHost(String(data.host));
         if (data.href) setPageUrl(String(data.href));
       }
+      if (isPreview && data.type === WIDGET_PREVIEW_UPDATE) {
+        applyPreviewDraft(data as WidgetPreviewDraft);
+      }
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [widgetId]);
+  }, [widgetId, isPreview, applyPreviewDraft]);
 
   useEffect(() => {
     if (!config?.appearance) return;
@@ -88,6 +126,14 @@ export function WidgetFrameApp() {
           previewToken,
         });
         setConfig(cfg);
+
+        if (isPreview) {
+          // Sandbox: never touch visitor localStorage or resume real conversations.
+          setPrechatDone(true);
+          setMessages(buildPreviewMessages(cfg.welcome_message));
+          return;
+        }
+
         const stored = loadVisitorState(widgetId);
         if (stored?.visitor_token) {
           setSession({
@@ -103,15 +149,34 @@ export function WidgetFrameApp() {
           setPrechatDone(true);
         }
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Failed to load widget");
+        if (isPreview) {
+          // DRAFT widgets 404 on public config; still show a sandboxed mock from draft posts.
+          setPrechatDone(true);
+          setMessages(buildPreviewMessages("Hi! How can we help?"));
+          setConfig({
+            public_id: widgetId,
+            name: "Support",
+            status: "ACTIVE",
+            welcome_message: "Hi! How can we help?",
+            offline_message: null,
+            require_name: false,
+            require_email: false,
+            appearance: {},
+          });
+        } else {
+          setError(e instanceof Error ? e.message : "Failed to load widget");
+        }
       } finally {
         setLoading(false);
       }
     })();
-  }, [widgetId, pageHost, previewToken]);
+  }, [widgetId, pageHost, previewToken, isPreview]);
 
   const ensureSession = useCallback(
     async (opts?: { force?: boolean }) => {
+      if (isPreview) {
+        throw new Error("Preview mode does not create sessions");
+      }
       if (!opts?.force && sessionRef.current?.visitor_token) {
         return sessionRef.current;
       }
@@ -167,7 +232,7 @@ export function WidgetFrameApp() {
 
       return create();
     },
-    [widgetId, name, email, pageHost, pageUrl, previewToken]
+    [widgetId, name, email, pageHost, pageUrl, previewToken, isPreview]
   );
 
   /** Run an authenticated widget call; on visitor 401, refresh session once and retry. */
@@ -208,48 +273,53 @@ export function WidgetFrameApp() {
 
   const loadMessages = useCallback(
     async (cid: string, token: string) => {
+      if (isPreview) return;
       const list = await widgetApi<Message[]>(
         `/public/widgets/${widgetId}/conversations/${cid}/messages`,
         { pageHost, visitorToken: token, previewToken, publicId: widgetId }
       );
       applyMessages(list);
     },
-    [widgetId, pageHost, previewToken, applyMessages]
+    [widgetId, pageHost, previewToken, applyMessages, isPreview]
   );
 
   const loadMessagesWithRecovery = useCallback(
     async (cid: string) => {
+      if (isPreview) return;
       await withVisitorAuth(async (sess) => {
         const targetId = sess.conversation_id || cid;
         if (targetId !== cid) setConversationId(targetId);
         await loadMessages(targetId, sess.visitor_token);
       });
     },
-    [withVisitorAuth, loadMessages]
+    [withVisitorAuth, loadMessages, isPreview]
   );
 
   useEffect(() => {
+    if (isPreview) return;
     if (conversationId && session?.visitor_token) {
       void loadMessagesWithRecovery(conversationId).catch((e) =>
         setError(e instanceof Error ? e.message : "Failed to load messages")
       );
     }
-  }, [conversationId, session?.visitor_token, loadMessagesWithRecovery]);
+  }, [conversationId, session?.visitor_token, loadMessagesWithRecovery, isPreview]);
 
   // Poll so AI replies appear without a full page refresh if WS is delayed.
   useEffect(() => {
-    if (!conversationId || !session?.visitor_token) return undefined;
+    if (isPreview || !conversationId || !session?.visitor_token) return undefined;
     const id = window.setInterval(() => {
       void loadMessagesWithRecovery(conversationId).catch(() => undefined);
     }, 2000);
     return () => window.clearInterval(id);
-  }, [conversationId, session?.visitor_token, loadMessagesWithRecovery]);
+  }, [conversationId, session?.visitor_token, loadMessagesWithRecovery, isPreview]);
 
   useSupportSocket({
-    token: session?.visitor_token ?? null,
+    token: isPreview ? null : (session?.visitor_token ?? null),
     publicSocket: true,
-    conversationId,
+    conversationId: isPreview ? null : conversationId,
+    enabled: !isPreview,
     onEvent: (event) => {
+      if (isPreview) return;
       if (
         (event.name === "message.created" || event.name === "message.received") &&
         conversationId &&
@@ -261,11 +331,11 @@ export function WidgetFrameApp() {
   });
 
   const visibleMessages = messages.filter(isCustomerVisible);
-  const pending = findPendingCustomerMessage(messages);
+  const pending = isPreview ? null : findPendingCustomerMessage(messages);
   const awaitingAi = pending !== null && !sending;
 
   useEffect(() => {
-    if (!pending || !conversationId || !session?.visitor_token) return undefined;
+    if (isPreview || !pending || !conversationId || !session?.visitor_token) return undefined;
     const elapsed = Date.now() - new Date(pending.created_at).getTime();
     const remaining = Math.max(0, 60000 - elapsed);
     const timer = window.setTimeout(() => {
@@ -292,7 +362,7 @@ export function WidgetFrameApp() {
       }).catch(() => undefined);
     }, remaining);
     return () => window.clearTimeout(timer);
-  }, [pending, conversationId, session, widgetId, pageHost, withVisitorAuth, loadMessages]);
+  }, [pending, conversationId, session, widgetId, pageHost, withVisitorAuth, loadMessages, isPreview]);
 
   const onMessagesScroll = () => {
     const el = messagesRef.current;
@@ -308,6 +378,7 @@ export function WidgetFrameApp() {
   }, [messages, awaitingAi, sending]);
 
   const startPrechat = async () => {
+    if (isPreview) return;
     setError(null);
     try {
       if (config?.require_name && !name.trim()) {
@@ -326,7 +397,7 @@ export function WidgetFrameApp() {
   };
 
   const send = async () => {
-    if (!text.trim() || !config) return;
+    if (isPreview || !text.trim() || !config) return;
     if (config.status !== "ACTIVE" && !previewToken) return;
     stickToBottomRef.current = true;
     setError(null);
@@ -396,7 +467,7 @@ export function WidgetFrameApp() {
     );
   }
 
-  const offline = config?.status === "INACTIVE" && !previewToken;
+  const offline = !isPreview && config?.status === "INACTIVE" && !previewToken;
 
   return (
     <div
@@ -412,7 +483,9 @@ export function WidgetFrameApp() {
       <header className="widget-frame-header">
         <div>
           <strong>{config?.name ?? "Support"}</strong>
-          <div className="widget-frame-sub">We typically reply in a few minutes</div>
+          <div className="widget-frame-sub">
+            {isPreview ? "Appearance preview" : "We typically reply in a few minutes"}
+          </div>
         </div>
         <button
           type="button"
@@ -451,7 +524,7 @@ export function WidgetFrameApp() {
       ) : (
         <>
           <div className="widget-frame-messages" ref={messagesRef} onScroll={onMessagesScroll}>
-            {config?.welcome_message && visibleMessages.length === 0 && (
+            {!isPreview && config?.welcome_message && visibleMessages.length === 0 && (
               <div className="widget-welcome">{config.welcome_message}</div>
             )}
             {ticketNotice && <div className="widget-ticket-notice">{ticketNotice}</div>}
@@ -471,11 +544,15 @@ export function WidgetFrameApp() {
             <input
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Type your message…"
-              disabled={sending}
+              placeholder={isPreview ? "Preview only — messages are not sent" : "Type your message…"}
+              disabled={sending || isPreview}
               autoComplete="off"
             />
-            <button type="submit" className="widget-frame-send" disabled={sending || !text.trim()}>
+            <button
+              type="submit"
+              className="widget-frame-send"
+              disabled={sending || isPreview || !text.trim()}
+            >
               Send
             </button>
           </form>

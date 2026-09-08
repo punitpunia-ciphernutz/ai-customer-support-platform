@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, ApiError } from "@/services/api/client";
 import { Alert, LoadingState, PageHeader } from "@/components/ui";
 import { SettingsSubNav } from "@/components/shared/SettingsSubNav";
@@ -8,12 +8,15 @@ import { WidgetForm } from "@/features/widgets/WidgetForm";
 import { EmbedSnippetCard } from "@/features/widgets/EmbedSnippetCard";
 import { WidgetPreview } from "@/features/widgets/WidgetPreview";
 import type { ChatWidget, EmbedSnippet, WidgetUpdateInput } from "@/features/widgets/types";
+import type { WidgetPreviewDraft } from "@/widget/previewMock";
 
 export function WidgetDetailPage() {
   const { widgetId } = useParams();
   const qc = useQueryClient();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [previewDraft, setPreviewDraft] = useState<WidgetPreviewDraft | null>(null);
+  const onDraftChange = useCallback((draft: WidgetPreviewDraft) => setPreviewDraft(draft), []);
 
   const widget = useQuery({
     queryKey: ["widgets", widgetId],
@@ -30,7 +33,12 @@ export function WidgetDetailPage() {
   const preview = useMutation({
     mutationFn: () =>
       api<{ frame_url: string }>(`/widgets/${widgetId}/preview-token`, { method: "POST" }),
-    onSuccess: (data) => setPreviewUrl(`${data.frame_url}&t=${Date.now()}`),
+    onSuccess: (data) => {
+      const url = new URL(data.frame_url, window.location.origin);
+      url.searchParams.set("preview", "true");
+      url.searchParams.set("t", String(Date.now()));
+      setPreviewUrl(url.toString());
+    },
   });
 
   const save = useMutation({
@@ -102,11 +110,12 @@ export function WidgetDetailPage() {
             saving={save.isPending}
             error={formError}
             onSave={(patch) => save.mutate(patch)}
+            onDraftChange={onDraftChange}
           />
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           {snippet.data && <EmbedSnippetCard snippet={snippet.data} />}
-          <WidgetPreview frameUrl={previewUrl} />
+          <WidgetPreview frameUrl={previewUrl} draft={previewDraft} />
         </div>
       </div>
     </div>

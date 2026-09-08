@@ -10,16 +10,20 @@ export function useSupportSocket({
   onEvent,
   publicSocket = false,
   conversationId = null,
+  enabled = true,
 }: {
   token: string | null;
   onEvent: Handler;
   publicSocket?: boolean;
   conversationId?: string | null;
+  /** When false, do not open a socket (e.g. Settings Live Preview sandbox). */
+  enabled?: boolean;
 }) {
   const handlerRef = useRef(onEvent);
   handlerRef.current = onEvent;
 
   useEffect(() => {
+    if (!enabled) return;
     let url: string;
     if (publicSocket) {
       const base = WS_BASE.replace(/\/ws$/, "/ws/public");
@@ -51,5 +55,5 @@ export function useSupportSocket({
       window.clearInterval(ping);
       ws.close();
     };
-  }, [token, publicSocket, conversationId]);
+  }, [token, publicSocket, conversationId, enabled]);
 }

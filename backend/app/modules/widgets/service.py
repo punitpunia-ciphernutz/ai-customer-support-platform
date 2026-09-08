@@ -163,7 +163,7 @@ class WidgetService:
         base = settings.frontend_public_url.rstrip("/")
         frame_url = (
             f"{base}/widget-frame.html?widget_id={widget.public_id}"
-            f"&preview_token={token}&page_host=localhost"
+            f"&preview_token={token}&page_host=localhost&preview=true"
         )
         return PreviewTokenOut(preview_token=token, expires_at=expires_at, frame_url=frame_url)
 
@@ -202,8 +202,8 @@ class WidgetService:
             raise HTTPException(status_code=403, detail="Domain not allowed for this widget")
         return host  # type: ignore[return-value]
 
-    def public_config(self, widget: ChatWidget) -> PublicWidgetConfigOut:
-        if widget.status == WidgetStatus.DRAFT:
+    def public_config(self, widget: ChatWidget, *, preview: bool = False) -> PublicWidgetConfigOut:
+        if widget.status == WidgetStatus.DRAFT and not preview:
             raise HTTPException(status_code=404, detail="Widget not found")
         return PublicWidgetConfigOut(
             public_id=widget.public_id,

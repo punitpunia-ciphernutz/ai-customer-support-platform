@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ChatWidget, WidgetUpdateInput } from "@/features/widgets/types";
+import type { WidgetPreviewDraft } from "@/widget/previewMock";
 
 const POSITIONS = [
   { value: "bottom-right", label: "Bottom right" },
@@ -52,11 +53,14 @@ export function WidgetForm({
   saving,
   error,
   onSave,
+  onDraftChange,
 }: {
   widget: ChatWidget;
   saving?: boolean;
   error?: string | null;
   onSave: (patch: WidgetUpdateInput) => void;
+  /** Live Settings preview — unsaved appearance/welcome values. */
+  onDraftChange?: (draft: WidgetPreviewDraft) => void;
 }) {
   const [name, setName] = useState(widget.name);
   const [status, setStatus] = useState(widget.status);
@@ -69,6 +73,20 @@ export function WidgetForm({
   const [textColor, setTextColor] = useState(widget.appearance?.text_color ?? "#FFFFFF");
   const [position, setPosition] = useState(widget.appearance?.launcher_position ?? "bottom-right");
   const [launcherText, setLauncherText] = useState(widget.appearance?.launcher_text ?? "Chat");
+
+  useEffect(() => {
+    onDraftChange?.({
+      name: name.trim() || widget.name,
+      welcome_message: welcome,
+      appearance: {
+        ...(widget.appearance ?? {}),
+        primary_color: /^#[0-9a-fA-F]{6}$/.test(primary) ? primary : "#3B66F5",
+        text_color: /^#[0-9a-fA-F]{6}$/.test(textColor) ? textColor : "#FFFFFF",
+        launcher_position: position,
+        launcher_text: launcherText.trim() || "Chat",
+      },
+    });
+  }, [name, welcome, primary, textColor, position, launcherText, widget.name, widget.appearance, onDraftChange]);
 
   return (
     <form

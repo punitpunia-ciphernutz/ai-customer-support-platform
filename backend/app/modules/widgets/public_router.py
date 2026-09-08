@@ -74,7 +74,7 @@ async def get_public_config(
         page_host=x_widget_page_host,
         preview=preview,
     )
-    return service.public_config(widget)
+    return service.public_config(widget, preview=preview)
 
 
 @router.post("/{public_id}/session", response_model=WidgetSessionOut)
