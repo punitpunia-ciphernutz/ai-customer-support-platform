@@ -56,6 +56,14 @@ class EmailDeliveryService:
         attachment_ids = list(metadata.get("attachment_ids") or [])
         attachments = await AttachmentService(self.db).build_outbound_payload(attachment_ids)
 
+        extra_headers: dict[str, str] = {}
+        if isinstance(metadata.get("headers"), dict):
+            extra_headers.update({str(k): str(v) for k, v in metadata["headers"].items()})
+        if metadata.get("auto_responder"):
+            extra_headers.setdefault("Auto-Submitted", "auto-replied")
+            extra_headers.setdefault("X-Auto-Response-Suppress", "All")
+            extra_headers.setdefault("Precedence", "auto_reply")
+
         request = SendEmailRequest(
             to_email=customer.email,
             subject=subject,
@@ -64,6 +72,7 @@ class EmailDeliveryService:
             in_reply_to=in_reply_to,
             references=references,
             attachments=attachments,
+            headers=extra_headers,
         )
 
         external_id = await provider.send(request)

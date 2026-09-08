@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@/services/api/client";
 import { Alert, LoadingState, PageHeader } from "@/components/ui";
@@ -19,8 +20,34 @@ type ChannelConfig = {
   settings: Record<string, unknown>;
 };
 
+type AutoReplyDraft = {
+  enabled: boolean;
+  subject: string;
+  body: string;
+};
+
+const DEFAULT_SUBJECT = "We received your message";
+const DEFAULT_BODY =
+  "Hi {{customer_name}},\n\nThanks for contacting us. We've received your email and will get back to you soon.\n\n— Support";
+
+function readAutoReply(settings: Record<string, unknown> | undefined): AutoReplyDraft {
+  return {
+    enabled: Boolean(settings?.email_auto_reply_enabled),
+    subject: String(settings?.email_auto_reply_subject ?? DEFAULT_SUBJECT),
+    body: String(settings?.email_auto_reply_body ?? DEFAULT_BODY),
+  };
+}
+
 export function ChannelSettingsPage() {
   const qc = useQueryClient();
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [saveErr, setSaveErr] = useState<string | null>(null);
+  const [autoReply, setAutoReply] = useState<AutoReplyDraft>({
+    enabled: false,
+    subject: DEFAULT_SUBJECT,
+    body: DEFAULT_BODY,
+  });
+
   const channels = useQuery({
     queryKey: ["channels"],
     queryFn: () => api<ChannelConfig[]>("/channels"),
@@ -29,6 +56,14 @@ export function ChannelSettingsPage() {
     queryKey: ["ai-config"],
     queryFn: () => api<{ channel_overrides: { channel: string; mode: AIMode | null }[] }>("/ai/config"),
   });
+
+  const emailChannel = (channels.data ?? []).find((ch) => ch.channel === "EMAIL");
+
+  useEffect(() => {
+    if (emailChannel) {
+      setAutoReply(readAutoReply(emailChannel.settings));
+    }
+  }, [emailChannel]);
 
   const patch = useMutation({
     mutationFn: ({ channel, enabled }: { channel: ChannelType; enabled: boolean }) =>
@@ -46,6 +81,29 @@ export function ChannelSettingsPage() {
         body: JSON.stringify({ channel_overrides: [{ channel, mode }] }),
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["ai-config"] }),
+  });
+
+  const saveAutoReply = useMutation({
+    mutationFn: (draft: AutoReplyDraft) =>
+      api<ChannelConfig>("/channels/EMAIL", {
+        method: "PATCH",
+        body: JSON.stringify({
+          settings: {
+            email_auto_reply_enabled: draft.enabled,
+            email_auto_reply_subject: draft.subject,
+            email_auto_reply_body: draft.body,
+          },
+        }),
+      }),
+    onSuccess: () => {
+      setSaveMsg("Email auto-responder saved.");
+      setSaveErr(null);
+      void qc.invalidateQueries({ queryKey: ["channels"] });
+    },
+    onError: (e) => {
+      setSaveErr(e instanceof ApiError ? e.message : "Failed to save auto-responder.");
+      setSaveMsg(null);
+    },
   });
 
   if (channels.isLoading || aiConfig.isLoading) return <LoadingState message="Loading channels…" />;
@@ -67,6 +125,9 @@ export function ChannelSettingsPage() {
     <div className="page-scroll">
       <PageHeader title="Settings" description="Configure inbound and outbound channels and AI modes per channel." />
       <SettingsSubNav />
+
+      {saveMsg && <Alert type="success">{saveMsg}</Alert>}
+      {saveErr && <Alert type="error">{saveErr}</Alert>}
 
       <div className="table-wrap">
         <table className="data-table">
@@ -135,6 +196,71 @@ export function ChannelSettingsPage() {
           </tbody>
         </table>
       </div>
+
+      {emailChannel && (
+        <section className="card mt-6">
+          <h2 className="section-title">Email Auto-Responder</h2>
+          <p className="form-hint mb-4">
+            Send an immediate receipt email when a customer starts a new email conversation. Only the
+            first message in a thread is acknowledged. Auto-submitted and bounce messages are ignored.
+          </p>
+
+          <label className="form-field form-field-inline">
+            <input
+              type="checkbox"
+              checked={autoReply.enabled}
+              onChange={(e) => setAutoReply((d) => ({ ...d, enabled: e.target.checked }))}
+            />
+            <span>Enable email auto-responder</span>
+          </label>
+
+          {autoReply.enabled && (
+            <>
+              <div className="form-field mt-4">
+                <label className="form-label" htmlFor="auto-reply-subject">
+                  Subject
+                </label>
+                <input
+                  id="auto-reply-subject"
+                  className="form-input"
+                  value={autoReply.subject}
+                  onChange={(e) => setAutoReply((d) => ({ ...d, subject: e.target.value }))}
+                  placeholder={DEFAULT_SUBJECT}
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="form-label" htmlFor="auto-reply-body">
+                  Body
+                </label>
+                <textarea
+                  id="auto-reply-body"
+                  className="form-textarea"
+                  rows={8}
+                  value={autoReply.body}
+                  onChange={(e) => setAutoReply((d) => ({ ...d, body: e.target.value }))}
+                  placeholder={DEFAULT_BODY}
+                />
+                <p className="form-hint">
+                  Placeholders: {"{{customer_name}}"}, {"{{customer_email}}"}, {"{{subject}}"},{" "}
+                  {"{{conversation_id}}"}, {"{{ticket_id}}"}
+                </p>
+              </div>
+            </>
+          )}
+
+          <div className="mt-4">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={saveAutoReply.isPending}
+              onClick={() => saveAutoReply.mutate(autoReply)}
+            >
+              {saveAutoReply.isPending ? "Saving…" : "Save auto-responder"}
+            </button>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

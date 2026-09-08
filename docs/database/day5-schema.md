@@ -77,6 +77,22 @@ Per-org channel settings (no plaintext secrets).
 
 **Unique:** `(organization_id, channel)`
 
+### EMAIL `settings` keys — auto-responder
+
+Stored in `channel_configurations.settings` (no migration; JSONB). Updated via `PATCH /api/v1/channels/EMAIL` (shallow-merged into existing settings).
+
+| Key | Type | Purpose |
+|-----|------|---------|
+| `email_auto_reply_enabled` | bool | When true, send a receipt email on the first customer message of a new email thread |
+| `email_auto_reply_subject` | string | Subject template (default: `We received your message`) |
+| `email_auto_reply_body` | text | Body template |
+
+**Placeholders:** `{{customer_name}}`, `{{customer_email}}`, `{{subject}}`, `{{conversation_id}}`, `{{ticket_id}}` (empty until a ticket exists).
+
+**Runtime:** `EmailAutoResponderService` runs after inbound email persistence. Guardrails: first customer message only; skip when inbound `Auto-Submitted` / bounce-like headers or mailer-daemon; skip if an auto-responder was already sent for the conversation; outbound sets `Auto-Submitted: auto-replied`.
+
+**UI:** Settings → Channels → Email Auto-Responder.
+
 ## Query patterns
 
 - **Thread lookup:** `messages.external_message_id IN (in_reply_to, references...)`

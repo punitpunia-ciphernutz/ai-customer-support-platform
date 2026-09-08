@@ -193,7 +193,7 @@ docker compose exec backend pytest -q tests/test_day3_agent.py
 3. **Inbox** (`/` or `/app/inbox`) — takeover, AI suggestions, email composer (To/subject/body), channel filters
 4. **Web Chat** — customer demo (no internal diagnostics)
 5. **Channels** (`/channels` or `/app/channels`) — channel overview, enable/disable, AI mode per channel
-6. **Settings → Channel settings** (`/settings/channels`) — detailed email configuration
+6. **Settings → Channel settings** (`/settings/channels`) — enable/disable channels, AI mode per channel, **Email Auto-Responder** (toggle + subject/body templates)
 7. **Customers** — list links to **Customer 360** at `/customers/:id`
 8. **Automations** (`/automations`) — list, **New automation**, enable/disable, detail + **execution steps**
 9. **Business hours** (`/settings/business-hours`) — editable weekly schedule, timezone, **holidays**

@@ -100,7 +100,7 @@ class ResendEmailProvider(EmailProvider):
             "subject": request.subject,
             "text": request.body_text,
         }
-        headers: dict[str, str] = {}
+        headers: dict[str, str] = dict(request.headers or {})
         if request.in_reply_to:
             headers["In-Reply-To"] = request.in_reply_to
         if request.references:

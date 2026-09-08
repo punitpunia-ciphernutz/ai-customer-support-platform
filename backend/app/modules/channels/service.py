@@ -54,7 +54,10 @@ class ChannelService:
         if provider is not None:
             cfg.provider = provider
         if settings is not None:
-            cfg.settings = settings
+            # Shallow-merge so partial PATCHes (e.g. auto-reply fields) keep other keys.
+            merged = dict(cfg.settings or {})
+            merged.update(settings)
+            cfg.settings = merged
         await self.db.flush()
         await self.db.refresh(cfg)
         return cfg

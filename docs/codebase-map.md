@@ -157,12 +157,17 @@ Each business area lives under `app/modules/<name>/`.
 | `router.py` | Thin HTTP: agent + **public** web-chat endpoints |
 | `service.py` | **ConversationService** — create/update/list, messages, events, audit |
 | `channels.py` | `ChannelAdapter` + WebChat/Email/Form adapters |
+| `email_delivery.py` | Outbound email send + threading headers |
+| `email_threading.py` | In-Reply-To / References / subject fallback |
 | `schemas.py` | Conversation/message DTOs |
+
+**Email auto-responder:** `modules/channels/auto_responder.py` — template receipt on first inbound email message; settings in `channel_configurations.settings`; UI `features/settings/ChannelSettingsPage.tsx`.
 
 **Important flows**
 
 - Agent inbox message → `router` → `ConversationService.add_agent_message` → adapter → DB → Redis event  
 - Customer web chat → `/public/conversations...` → same service (no agent JWT)
+- Inbound email → `webhooks/email/inbound` → `receive_inbound_email` → optional `EmailAutoResponderService` → AI enqueue
 
 **Change here for:** conversation status rules, assign/close logic, new channel adapter, public chat API.
 

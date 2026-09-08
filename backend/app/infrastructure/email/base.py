@@ -28,6 +28,7 @@ class SendEmailRequest:
     in_reply_to: str | None = None
     references: list[str] = field(default_factory=list)
     attachments: list[dict[str, Any]] = field(default_factory=list)
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 class EmailProvider(ABC):

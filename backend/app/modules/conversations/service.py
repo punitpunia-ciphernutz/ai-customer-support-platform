@@ -479,6 +479,14 @@ class ConversationService:
             ),
             incoming.organization_id,
         )
+        if incoming.channel == ChannelType.EMAIL:
+            from app.modules.channels.auto_responder import EmailAutoResponderService
+
+            await EmailAutoResponderService(self.db).maybe_send_for_inbound(
+                conversation=conversation,
+                inbound_message=msg,
+                inbound_metadata=incoming.metadata,
+            )
         return conversation, msg, created
 
     async def _create_outbound_message(
@@ -529,7 +537,11 @@ class ConversationService:
                 await attachment_service.link_to_message(attachment_id, msg.id)
             meta["attachment_ids"] = attachment_ids
 
-        if conversation.channel == ChannelType.EMAIL and sender_type in {SenderType.AGENT, SenderType.AI}:
+        if conversation.channel == ChannelType.EMAIL and (
+            sender_type in {SenderType.AGENT, SenderType.AI}
+            or bool(meta.get("auto_responder"))
+            or bool(meta.get("deliver_email"))
+        ):
             msg.delivery_status = DeliveryStatus.SENDING
             await self.db.flush()
             try:
@@ -886,6 +898,28 @@ class ConversationService:
             sender_id=None,
             content=content,
             metadata=metadata,
+        )
+
+    async def send_auto_responder_reply(
+        self,
+        conversation_id: str,
+        content: str,
+        subject: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> Message:
+        """Send a configured receipt-style auto-reply on the email channel."""
+        conversation = await self.get_conversation_by_id(conversation_id)
+        meta = dict(metadata or {})
+        meta["auto_responder"] = True
+        meta["subject"] = subject
+        meta.setdefault("deliver_email", True)
+        return await self._create_outbound_message(
+            conversation=conversation,
+            organization_id=conversation.organization_id,
+            sender_type=SenderType.SYSTEM,
+            sender_id=None,
+            content=content,
+            metadata=meta,
         )
 
     async def _publish_channel_event(self, event, organization_id: str) -> None:

@@ -25,6 +25,13 @@ class ChannelConfigurationUpdate(BaseModel):
     settings: dict[str, Any] | None = None
 
 
+# Keys stored in channel_configurations.settings for EMAIL auto-responder:
+# - email_auto_reply_enabled: bool
+# - email_auto_reply_subject: str (supports {{customer_name}}, {{customer_email}},
+#   {{subject}}, {{conversation_id}}, {{ticket_id}})
+# - email_auto_reply_body: str (same placeholders)
+
+
 class AttachmentOut(BaseModel):
     id: str
     message_id: str | None

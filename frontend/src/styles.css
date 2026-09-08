@@ -2299,9 +2299,18 @@ a:hover {
 .mb-4 { margin-bottom: 1rem; }
 .mb-6 { margin-bottom: 1.5rem; }
 .mt-4 { margin-top: 1rem; }
+.mt-6 { margin-top: 1.5rem; }
 .text-muted { color: var(--text-muted); }
 .text-sm { font-size: 0.8125rem; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+.form-field-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
 
 /* ── Settings sub-navigation ── */
 .settings-subnav {
