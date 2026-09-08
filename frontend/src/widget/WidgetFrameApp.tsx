@@ -3,7 +3,14 @@ import type { Conversation, Message } from "@/types";
 import { AiRespondingIndicator, MessageBubble } from "@/features/conversations/MessageBubble";
 import { findPendingCustomerMessage } from "@/features/conversations/chatUtils";
 import { useSupportSocket } from "@/hooks/useSupportSocket";
-import { loadVisitorState, saveVisitorState, widgetApi, WidgetApiError } from "@/widget/api";
+import {
+  clearVisitorState,
+  isVisitorAuthError,
+  loadVisitorState,
+  saveVisitorState,
+  widgetApi,
+  WidgetApiError,
+} from "@/widget/api";
 import type { PublicWidgetConfig, WidgetSession } from "@/widget/types";
 
 function isCustomerVisible(m: Message) {
@@ -38,6 +45,10 @@ export function WidgetFrameApp() {
   const messagesRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const checkedRef = useRef<Set<string>>(new Set());
+  const sessionRef = useRef<WidgetSession | null>(null);
+  const sessionRefreshRef = useRef<Promise<WidgetSession> | null>(null);
+
+  sessionRef.current = session;
 
   const primary = config?.appearance?.primary_color ?? "#3B66F5";
   const textColor = config?.appearance?.text_color ?? "#FFFFFF";
@@ -87,8 +98,7 @@ export function WidgetFrameApp() {
             conversation_id: stored.conversation_id ?? null,
           });
           if (stored.conversation_id) setConversationId(stored.conversation_id);
-          if (!cfg.require_email && !cfg.require_name) setPrechatDone(true);
-          else setPrechatDone(true);
+          setPrechatDone(true);
         } else if (!cfg.require_email && !cfg.require_name) {
           setPrechatDone(true);
         }
@@ -100,75 +110,140 @@ export function WidgetFrameApp() {
     })();
   }, [widgetId, pageHost, previewToken]);
 
-  const ensureSession = useCallback(async () => {
-    if (session?.visitor_token) return session;
-    const stored = loadVisitorState(widgetId);
-    const body = {
-      visitor_key: stored?.visitor_key,
-      name: name || undefined,
-      email: email || undefined,
-      page_host: pageHost,
-      page_url: pageUrl,
-    };
-    const next = await widgetApi<WidgetSession>(`/public/widgets/${widgetId}/session`, {
-      method: "POST",
-      pageHost,
-      previewToken,
-      body: JSON.stringify(body),
+  const ensureSession = useCallback(
+    async (opts?: { force?: boolean }) => {
+      if (!opts?.force && sessionRef.current?.visitor_token) {
+        return sessionRef.current;
+      }
+
+      if (opts?.force && sessionRefreshRef.current) {
+        return sessionRefreshRef.current;
+      }
+
+      const create = async (): Promise<WidgetSession> => {
+        const current = sessionRef.current;
+        const stored = loadVisitorState(widgetId);
+        // Prefer in-memory key; storage may still hold visitor_key after a token wipe.
+        const visitorKey = current?.visitor_key || stored?.visitor_key;
+
+        if (opts?.force) {
+          clearVisitorState(widgetId);
+          setSession(null);
+          sessionRef.current = null;
+        }
+
+        const body = {
+          visitor_key: visitorKey,
+          name: name || undefined,
+          email: email || undefined,
+          page_host: pageHost,
+          page_url: pageUrl,
+        };
+        const next = await widgetApi<WidgetSession>(`/public/widgets/${widgetId}/session`, {
+          method: "POST",
+          pageHost,
+          previewToken,
+          body: JSON.stringify(body),
+        });
+        saveVisitorState(widgetId, {
+          visitor_key: next.visitor_key,
+          visitor_token: next.visitor_token,
+          customer_id: next.customer_id,
+          conversation_id: next.conversation_id,
+        });
+        sessionRef.current = next;
+        setSession(next);
+        if (next.conversation_id) setConversationId(next.conversation_id);
+        return next;
+      };
+
+      if (opts?.force) {
+        const pending = create().finally(() => {
+          sessionRefreshRef.current = null;
+        });
+        sessionRefreshRef.current = pending;
+        return pending;
+      }
+
+      return create();
+    },
+    [widgetId, name, email, pageHost, pageUrl, previewToken]
+  );
+
+  /** Run an authenticated widget call; on visitor 401, refresh session once and retry. */
+  const withVisitorAuth = useCallback(
+    async <T,>(operation: (sess: WidgetSession) => Promise<T>): Promise<T> => {
+      try {
+        const sess = await ensureSession();
+        return await operation(sess);
+      } catch (e) {
+        if (!isVisitorAuthError(e)) throw e;
+        clearVisitorState(widgetId);
+        setSession(null);
+        sessionRef.current = null;
+        setError(null);
+        const sess = await ensureSession({ force: true });
+        return await operation(sess);
+      }
+    },
+    [ensureSession, widgetId]
+  );
+
+  const applyMessages = useCallback((list: Message[]) => {
+    setMessages((prev) => {
+      if (
+        prev.length === list.length &&
+        prev.every(
+          (m, i) =>
+            m.id === list[i]?.id &&
+            m.content === list[i]?.content &&
+            m.created_at === list[i]?.created_at
+        )
+      ) {
+        return prev;
+      }
+      return list;
     });
-    saveVisitorState(widgetId, {
-      visitor_key: next.visitor_key,
-      visitor_token: next.visitor_token,
-      customer_id: next.customer_id,
-      conversation_id: next.conversation_id,
-    });
-    setSession(next);
-    if (next.conversation_id) setConversationId(next.conversation_id);
-    return next;
-  }, [session, widgetId, name, email, pageHost, pageUrl, previewToken]);
+  }, []);
 
   const loadMessages = useCallback(
     async (cid: string, token: string) => {
       const list = await widgetApi<Message[]>(
         `/public/widgets/${widgetId}/conversations/${cid}/messages`,
-        { pageHost, visitorToken: token, previewToken }
+        { pageHost, visitorToken: token, previewToken, publicId: widgetId }
       );
-      // Avoid re-render/scroll churn when the 2s poll returns the same messages.
-      setMessages((prev) => {
-        if (
-          prev.length === list.length &&
-          prev.every(
-            (m, i) =>
-              m.id === list[i]?.id &&
-              m.content === list[i]?.content &&
-              m.created_at === list[i]?.created_at
-          )
-        ) {
-          return prev;
-        }
-        return list;
+      applyMessages(list);
+    },
+    [widgetId, pageHost, previewToken, applyMessages]
+  );
+
+  const loadMessagesWithRecovery = useCallback(
+    async (cid: string) => {
+      await withVisitorAuth(async (sess) => {
+        const targetId = sess.conversation_id || cid;
+        if (targetId !== cid) setConversationId(targetId);
+        await loadMessages(targetId, sess.visitor_token);
       });
     },
-    [widgetId, pageHost, previewToken]
+    [withVisitorAuth, loadMessages]
   );
 
   useEffect(() => {
     if (conversationId && session?.visitor_token) {
-      void loadMessages(conversationId, session.visitor_token).catch((e) =>
+      void loadMessagesWithRecovery(conversationId).catch((e) =>
         setError(e instanceof Error ? e.message : "Failed to load messages")
       );
     }
-  }, [conversationId, session?.visitor_token, loadMessages]);
+  }, [conversationId, session?.visitor_token, loadMessagesWithRecovery]);
 
   // Poll so AI replies appear without a full page refresh if WS is delayed.
   useEffect(() => {
     if (!conversationId || !session?.visitor_token) return undefined;
-    const token = session.visitor_token;
     const id = window.setInterval(() => {
-      void loadMessages(conversationId, token).catch(() => undefined);
+      void loadMessagesWithRecovery(conversationId).catch(() => undefined);
     }, 2000);
     return () => window.clearInterval(id);
-  }, [conversationId, session?.visitor_token, loadMessages]);
+  }, [conversationId, session?.visitor_token, loadMessagesWithRecovery]);
 
   useSupportSocket({
     token: session?.visitor_token ?? null,
@@ -180,7 +255,7 @@ export function WidgetFrameApp() {
         conversationId &&
         session?.visitor_token
       ) {
-        void loadMessages(conversationId, session.visitor_token);
+        void loadMessagesWithRecovery(conversationId);
       }
     },
   });
@@ -197,27 +272,27 @@ export function WidgetFrameApp() {
       const key = `${conversationId}:${pending.id}`;
       if (checkedRef.current.has(key)) return;
       checkedRef.current.add(key);
-      void widgetApi<{ status?: string; ticket_id?: string | null }>(
-        `/public/widgets/${widgetId}/conversations/${conversationId}/check-ai-response`,
-        {
-          method: "POST",
-          pageHost,
-          visitorToken: session.visitor_token,
-          body: JSON.stringify({ message_id: pending.id }),
-        }
-      )
-        .then((result) => {
-          if (result.status === "ticket_created" && result.ticket_id) {
-            setTicketNotice(
-              `A support ticket was created (${result.ticket_id.slice(0, 8)}…). Our team will follow up soon.`
-            );
-            void loadMessages(conversationId, session.visitor_token);
+      void withVisitorAuth(async (sess) => {
+        const result = await widgetApi<{ status?: string; ticket_id?: string | null }>(
+          `/public/widgets/${widgetId}/conversations/${conversationId}/check-ai-response`,
+          {
+            method: "POST",
+            pageHost,
+            visitorToken: sess.visitor_token,
+            publicId: widgetId,
+            body: JSON.stringify({ message_id: pending.id }),
           }
-        })
-        .catch(() => undefined);
+        );
+        if (result.status === "ticket_created" && result.ticket_id) {
+          setTicketNotice(
+            `A support ticket was created (${result.ticket_id.slice(0, 8)}…). Our team will follow up soon.`
+          );
+          await loadMessages(conversationId, sess.visitor_token);
+        }
+      }).catch(() => undefined);
     }, remaining);
     return () => window.clearTimeout(timer);
-  }, [pending, conversationId, session, widgetId, pageHost, loadMessages]);
+  }, [pending, conversationId, session, widgetId, pageHost, withVisitorAuth, loadMessages]);
 
   const onMessagesScroll = () => {
     const el = messagesRef.current;
@@ -258,41 +333,46 @@ export function WidgetFrameApp() {
     setTicketNotice(null);
     setSending(true);
     try {
-      const sess = await ensureSession();
-      if (!conversationId) {
-        const conv = await widgetApi<Conversation>(`/public/widgets/${widgetId}/conversations`, {
+      await withVisitorAuth(async (sess) => {
+        const activeConversationId = conversationId ?? sess.conversation_id;
+        if (!activeConversationId) {
+          const conv = await widgetApi<Conversation>(`/public/widgets/${widgetId}/conversations`, {
+            method: "POST",
+            pageHost,
+            visitorToken: sess.visitor_token,
+            previewToken,
+            publicId: widgetId,
+            body: JSON.stringify({
+              content: text.trim(),
+              metadata: { page_url: pageUrl, page_host: pageHost },
+            }),
+          });
+          setConversationId(conv.id);
+          saveVisitorState(widgetId, {
+            visitor_key: sess.visitor_key,
+            visitor_token: sess.visitor_token,
+            customer_id: sess.customer_id,
+            conversation_id: conv.id,
+          });
+          setText("");
+          await loadMessages(conv.id, sess.visitor_token);
+          return;
+        }
+
+        await widgetApi(`/public/widgets/${widgetId}/conversations/${activeConversationId}/messages`, {
           method: "POST",
           pageHost,
           visitorToken: sess.visitor_token,
           previewToken,
+          publicId: widgetId,
           body: JSON.stringify({
             content: text.trim(),
             metadata: { page_url: pageUrl, page_host: pageHost },
           }),
         });
-        setConversationId(conv.id);
-        saveVisitorState(widgetId, {
-          visitor_key: sess.visitor_key,
-          visitor_token: sess.visitor_token,
-          customer_id: sess.customer_id,
-          conversation_id: conv.id,
-        });
         setText("");
-        await loadMessages(conv.id, sess.visitor_token);
-      } else {
-        await widgetApi(`/public/widgets/${widgetId}/conversations/${conversationId}/messages`, {
-          method: "POST",
-          pageHost,
-          visitorToken: sess.visitor_token,
-          previewToken,
-          body: JSON.stringify({
-            content: text.trim(),
-            metadata: { page_url: pageUrl, page_host: pageHost },
-          }),
-        });
-        setText("");
-        await loadMessages(conversationId, sess.visitor_token);
-      }
+        await loadMessages(activeConversationId, sess.visitor_token);
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to send");
     } finally {
