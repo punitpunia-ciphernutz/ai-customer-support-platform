@@ -148,12 +148,24 @@ async def run_support_agent_graph(
         async with trace_step(collector, "retrieve_knowledge"):
             if db_session is None or not s.organization_id:
                 return {"retrieved_documents": [], "retrieval_score": 0.0, "knowledge_available": False}
+            retrieval_mode = config.retrieval_mode
             hybrid = HybridRetriever(
                 db_session,
                 retriever=_retriever_for_session(db_session, provider, retriever),
                 keyword_weight=config.hybrid_keyword_weight,
+                mode=retrieval_mode,
             )
-            hits = await hybrid.search(s, organization_id=s.organization_id, top_k=settings.ai_retrieval_top_k)
+            retrieve_k = (
+                settings.ai_rrf_candidate_k
+                if retrieval_mode == "hybrid_rrf"
+                else settings.ai_retrieval_top_k
+            )
+            hits = await hybrid.search(
+                s,
+                organization_id=s.organization_id,
+                top_k=retrieve_k,
+                mode=retrieval_mode,
+            )
             ranked = await Reranker(llm=provider).rank(
                 s.prepared_query or s.user_message, hits, top_k=settings.ai_final_top_k
             )
@@ -448,14 +460,24 @@ async def _fallback_support_agent(
 
         if db_session and state.organization_id:
             async with trace_step(trace, "fallback_retrieve_knowledge"):
+                retrieval_mode = config.retrieval_mode
                 hybrid = HybridRetriever(
                     db_session,
                     retriever=_retriever_for_session(db_session, llm, retriever),
                     keyword_weight=config.hybrid_keyword_weight,
+                    mode=retrieval_mode,
                 )
                 state.prepared_query = QueryPreparer.prepare(state)
+                retrieve_k = (
+                    settings.ai_rrf_candidate_k
+                    if retrieval_mode == "hybrid_rrf"
+                    else settings.ai_retrieval_top_k
+                )
                 hits = await hybrid.search(
-                    state, organization_id=state.organization_id, top_k=settings.ai_retrieval_top_k
+                    state,
+                    organization_id=state.organization_id,
+                    top_k=retrieve_k,
+                    mode=retrieval_mode,
                 )
                 ranked = await Reranker(llm=llm).rank(state.user_message, hits, top_k=settings.ai_final_top_k)
                 state.retrieved_documents = [

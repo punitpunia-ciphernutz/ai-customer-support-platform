@@ -1,8 +1,8 @@
 # Hybrid Search Implementation Plan
 
-**Status:** Plan only — no implementation yet  
+**Status:** Implemented Phases 0–5; **default is now `hybrid_rrf`** (`legacy` = optional rollback) — see [`hybrid-search-changes.md`](hybrid-search-changes.md)  
 **Source architecture:** `Production-Grade Hybrid Vector Search Architecture`  
-**Baseline:** inspected codebase as of 2026-09-08  
+**Baseline:** inspected codebase as of 2026-09-08; implementation landed 2026-09-09; default flipped same day  
 **Invariant:** PostgreSQL + pgvector, Gemini `gemini-embedding-001` @ 1536 dims, existing LLM/heuristic reranker, existing RelevanceGate, existing APIs/response formats preserved. Legacy retrieval remains available as rollback.
 
 ---

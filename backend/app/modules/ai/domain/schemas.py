@@ -318,6 +318,7 @@ class AIConfigOut(BaseModel):
     escalate_if_unknown: bool = True
     multilingual_enabled: bool = True
     hybrid_keyword_weight: float = 0.3
+    retrieval_mode: str | None = None
     missed_chat_timeout_minutes: int = 5
     ai_response_timeout_seconds: int = 60
     llm_model: str = "gemini-3.1-flash-lite"
@@ -350,6 +351,10 @@ class AIConfigUpdate(BaseModel):
     escalate_if_unknown: bool | None = None
     multilingual_enabled: bool | None = None
     hybrid_keyword_weight: float | None = Field(default=None, ge=0.0, le=1.0)
+    retrieval_mode: str | None = Field(
+        default=None,
+        description="Per-org override; omit keeps current. Use legacy|hybrid_rrf; send empty string to clear.",
+    )
     missed_chat_timeout_minutes: int | None = Field(default=None, ge=1, le=1440)
     ai_response_timeout_seconds: int | None = Field(default=None, ge=15, le=600)
     llm_model: str | None = Field(default=None, min_length=1, max_length=128)

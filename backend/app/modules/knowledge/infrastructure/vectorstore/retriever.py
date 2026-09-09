@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -91,8 +91,14 @@ class PgVectorRetriever(Retriever):
         self, query: str, *, organization_id: str, top_k: int | None = None
     ) -> list[RetrievalHit]:
         """Direct pgvector cosine search (used by the LangChain adapter)."""
+        settings = get_settings()
         k = top_k or self.default_top_k
         vector = await self.embedding_provider.embed_query(query)
+
+        # Tune HNSW recall/latency for this session (no-op if index unused).
+        ef_search = max(1, int(settings.hnsw_ef_search))
+        await self.db.execute(text(f"SET LOCAL hnsw.ef_search = {ef_search}"))
+
         stmt = (
             select(
                 DocumentChunk.id,

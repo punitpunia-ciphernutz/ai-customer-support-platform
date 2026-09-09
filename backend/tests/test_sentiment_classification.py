@@ -26,6 +26,7 @@ def _runtime_config() -> RuntimeAIConfig:
         escalate_if_unknown=False,
         multilingual_enabled=True,
         hybrid_keyword_weight=0.3,
+        retrieval_mode="legacy",
         missed_chat_timeout_minutes=5,
         ai_response_timeout_seconds=30,
         llm_model="echo",

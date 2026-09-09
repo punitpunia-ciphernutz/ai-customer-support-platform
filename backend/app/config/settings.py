@@ -41,6 +41,17 @@ class Settings(BaseSettings):
     ai_min_retrieval_score: float = 0.35
     support_agent_graph_version: str = "support-agent-v1"
 
+    # Hybrid search (default = hybrid_rrf; legacy is optional rollback)
+    # Values: "legacy" | "hybrid_rrf"
+    ai_retrieval_mode: str = "hybrid_rrf"
+    ai_rrf_candidate_k: int = 40
+    ai_rrf_k: int = 60
+    ai_vector_candidate_k: int = 40
+    ai_fts_candidate_k: int = 40
+    hnsw_ef_search: int = 40
+    hnsw_m: int = 16
+    hnsw_ef_construction: int = 64
+
     # Day 5 — email + object storage
     email_provider: str = "mock"
     email_from_address: str = "support@acme.example"

@@ -25,6 +25,7 @@ class RuntimeAIConfig:
     escalate_if_unknown: bool
     multilingual_enabled: bool
     hybrid_keyword_weight: float
+    retrieval_mode: str  # resolved: org override or settings default
     missed_chat_timeout_minutes: int
     ai_response_timeout_seconds: int
     llm_model: str
@@ -69,11 +70,17 @@ class RuntimeAIConfig:
         override: BotConfiguration | None = None,
         channel: str | None = None,
     ) -> RuntimeAIConfig:
+        from app.config import get_settings
+        from app.modules.ai.infrastructure.retrieval.hybrid_retriever import normalize_retrieval_mode
+
         def pick(field: str, default: Any) -> Any:
             if override is None:
                 return default
             value = getattr(override, field, None)
             return default if value is None else value
+
+        org_mode = getattr(base, "retrieval_mode", None)
+        resolved_mode = normalize_retrieval_mode(org_mode or get_settings().ai_retrieval_mode)
 
         return cls(
             enabled=base.enabled,
@@ -85,6 +92,7 @@ class RuntimeAIConfig:
             escalate_if_unknown=base.escalate_if_unknown,
             multilingual_enabled=pick("multilingual_enabled", base.multilingual_enabled),
             hybrid_keyword_weight=base.hybrid_keyword_weight,
+            retrieval_mode=resolved_mode,
             missed_chat_timeout_minutes=base.missed_chat_timeout_minutes,
             ai_response_timeout_seconds=base.ai_response_timeout_seconds,
             llm_model=getattr(base, "llm_model", None) or "gemini-3.1-flash-lite",

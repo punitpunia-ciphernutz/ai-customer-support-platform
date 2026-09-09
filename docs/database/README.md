@@ -9,5 +9,6 @@ Operational schema references (not historical day plans).
 | [day6-schema.md](day6-schema.md) | Automations, SLA, business hours, notifications |
 | [chat-widgets-schema.md](chat-widgets-schema.md) | Embeddable chat widgets |
 | [response-policy-schema.md](response-policy-schema.md) | Soft-reply / OOD AI config fields |
+| [hybrid-search-schema.md](hybrid-search-schema.md) | HNSW + FTS + RRF retrieval settings/indexes |
 
 Migrations live under `backend/migrations/versions/`.

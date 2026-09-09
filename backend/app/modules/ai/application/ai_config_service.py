@@ -90,6 +90,19 @@ async def update_ai_config(db: AsyncSession, organization_id: str, body: AIConfi
             )
         payload["llm_model"] = normalize_llm_model(requested)
 
+    if "retrieval_mode" in payload:
+        mode = payload["retrieval_mode"]
+        if mode is None or (isinstance(mode, str) and mode.strip() == ""):
+            payload["retrieval_mode"] = None
+        else:
+            normalized = str(mode).strip().lower()
+            if normalized not in {"legacy", "hybrid_rrf"}:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="retrieval_mode must be 'legacy', 'hybrid_rrf', or null",
+                )
+            payload["retrieval_mode"] = normalized
+
     for key, value in payload.items():
         setattr(config, key, value)
     await db.flush()

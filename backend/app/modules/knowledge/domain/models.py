@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.database.base import Base
@@ -98,6 +98,9 @@ class DocumentChunk(Base):
     token_count: Mapped[int | None] = mapped_column(Integer)
     metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, default=dict)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIMENSIONS))
+    # FTS fields (Phase 2): title+content text + simple tsvector maintained by DB trigger
+    search_document: Mapped[str | None] = mapped_column(Text)
+    search_tsv: Mapped[Any | None] = mapped_column(TSVECTOR)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     document: Mapped[Document] = relationship(back_populates="chunks")

@@ -17,6 +17,7 @@ from app.modules.knowledge.infrastructure.embeddings import EmbeddingProvider, g
 from app.modules.knowledge.infrastructure.loaders import LoadedContent
 from app.modules.knowledge.infrastructure.parsers import get_default_chunker
 from app.modules.knowledge.infrastructure.parsers.normalize import content_hash
+from app.modules.ai.infrastructure.retrieval.fts_search import build_search_document
 
 
 class IngestionService:
@@ -119,6 +120,7 @@ class IngestionService:
                 raise ValueError("No content to ingest after normalization")
 
             vectors = await self.embedding_provider.embed_documents([c.content for c in chunks])
+            doc_title = loaded.title or document.title
             for chunk, vector in zip(chunks, vectors, strict=True):
                 self.db.add(
                     DocumentChunk(
@@ -128,6 +130,7 @@ class IngestionService:
                         token_count=chunk.token_count,
                         metadata_=chunk.metadata,
                         embedding=vector,
+                        search_document=build_search_document(title=doc_title, content=chunk.content),
                     )
                 )
 

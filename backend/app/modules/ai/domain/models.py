@@ -124,6 +124,8 @@ class AIConfig(Base):
     escalate_if_unknown: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     multilingual_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     hybrid_keyword_weight: Mapped[float] = mapped_column(Float, default=0.3, nullable=False)
+    # null = use Settings.ai_retrieval_mode; otherwise "legacy" | "hybrid_rrf"
+    retrieval_mode: Mapped[str | None] = mapped_column(String(32), nullable=True)
     business_hours: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     missed_chat_timeout_minutes: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
     ai_response_timeout_seconds: Mapped[int] = mapped_column(Integer, default=60, nullable=False)

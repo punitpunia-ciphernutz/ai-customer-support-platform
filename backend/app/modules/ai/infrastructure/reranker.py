@@ -53,12 +53,24 @@ class Reranker:
 
 
 def _heuristic_score(query: str, hit: RetrievalHit) -> float:
-    """Blend vector similarity with token overlap for offline/tests."""
+    """Blend vector/rank similarity with token overlap for offline/tests.
+
+    RRF fusion scores are not cosine similarities (typically ≪ 1). When a hit
+    carries ``rrf_rank``, use rank position as the similarity proxy so Echo /
+    heuristic paths remain comparable to the legacy cosine blend.
+    """
     q_tokens = set(re.findall(r"[a-z0-9]+", query.lower()))
     text = f"{hit.title} {hit.content}".lower()
     t_tokens = set(re.findall(r"[a-z0-9]+", text))
     overlap = len(q_tokens & t_tokens) / max(len(q_tokens), 1)
-    vector = max(0.0, min(1.0, hit.score))
+
+    rrf_rank = hit.metadata.get("rrf_rank") if hit.metadata else None
+    if rrf_rank is not None:
+        rank = max(1, int(rrf_rank))
+        # rank 1 → 1.0, rank 2 → 0.98, … floor at 0.2
+        vector = max(0.2, min(1.0, 1.0 - (rank - 1) * 0.02))
+    else:
+        vector = max(0.0, min(1.0, hit.score))
     return min(1.0, 0.55 * vector + 0.45 * overlap)
 
 

@@ -1,22 +1,30 @@
-"""Hybrid semantic + keyword retrieval with score blending."""
+"""Hybrid semantic + keyword retrieval with legacy merge or RRF fusion."""
 
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.modules.ai.infrastructure.retrieval.query_preparer import QueryPreparer
 from app.modules.ai.domain.schemas import SupportAgentState
+from app.modules.ai.infrastructure.retrieval.fts_search import fts_search
+from app.modules.ai.infrastructure.retrieval.query_preparer import QueryPreparer
+from app.modules.ai.infrastructure.retrieval.rrf import rrf_fuse
 from app.modules.knowledge.domain.models import Document, DocumentChunk, IngestionStatus, KnowledgeSource
 from app.modules.knowledge.infrastructure.vectorstore.retriever import PgVectorRetriever, RetrievalHit, Retriever
+
+VALID_RETRIEVAL_MODES = frozenset({"legacy", "hybrid_rrf"})
 
 
 def _tokenize(query: str) -> list[str]:
     return [t for t in re.findall(r"[a-zA-Z0-9]{3,}", query.lower()) if t not in {"the", "and", "for", "how"}]
+
+
+def normalize_retrieval_mode(mode: str | None) -> str:
+    value = (mode or "legacy").strip().lower()
+    return value if value in VALID_RETRIEVAL_MODES else "legacy"
 
 
 class HybridRetriever:
@@ -26,11 +34,13 @@ class HybridRetriever:
         *,
         retriever: Retriever | None = None,
         keyword_weight: float | None = None,
+        mode: str | None = None,
     ) -> None:
         self.db = db
         self.retriever = retriever or PgVectorRetriever(db)
-        settings = get_settings()
         self.keyword_weight = keyword_weight if keyword_weight is not None else 0.3
+        settings = get_settings()
+        self.mode = normalize_retrieval_mode(mode if mode is not None else settings.ai_retrieval_mode)
 
     async def search(
         self,
@@ -38,14 +48,48 @@ class HybridRetriever:
         *,
         organization_id: str,
         top_k: int | None = None,
+        mode: str | None = None,
     ) -> list[RetrievalHit]:
         settings = get_settings()
-        k = top_k or settings.ai_retrieval_top_k
+        retrieval_mode = normalize_retrieval_mode(mode if mode is not None else self.mode)
         query = QueryPreparer.prepare(state)
 
+        if retrieval_mode == "hybrid_rrf":
+            return await self._search_rrf(
+                query,
+                organization_id=organization_id,
+                top_k=top_k or settings.ai_rrf_candidate_k,
+            )
+
+        k = top_k or settings.ai_retrieval_top_k
         semantic_hits = await self.retriever.search(query, organization_id=organization_id, top_k=k)
         keyword_hits = await self._keyword_search(query, organization_id=organization_id, top_k=k)
         return self._merge_hits(semantic_hits, keyword_hits, top_k=k)
+
+    async def _search_rrf(
+        self,
+        query: str,
+        *,
+        organization_id: str,
+        top_k: int,
+    ) -> list[RetrievalHit]:
+        settings = get_settings()
+        vector_k = settings.ai_vector_candidate_k
+        fts_k = settings.ai_fts_candidate_k
+        semantic_hits = await self.retriever.search(
+            query, organization_id=organization_id, top_k=vector_k
+        )
+        fts_hits = await self._fts_search(query, organization_id=organization_id, top_k=fts_k)
+        return rrf_fuse(
+            [semantic_hits, fts_hits],
+            k=settings.ai_rrf_k,
+            top_k=top_k,
+            list_labels=["semantic", "fts"],
+        )
+
+    async def _fts_search(self, query: str, *, organization_id: str, top_k: int) -> list[RetrievalHit]:
+        """FTS leg (hybrid_rrf mode; unused by legacy merge)."""
+        return await fts_search(self.db, query, organization_id=organization_id, top_k=top_k)
 
     async def _keyword_search(self, query: str, *, organization_id: str, top_k: int) -> list[RetrievalHit]:
         tokens = _tokenize(query)

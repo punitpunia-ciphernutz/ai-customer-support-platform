@@ -41,6 +41,9 @@ async def test_email_knowledge_base_sends_when_grounded() -> None:
             )
         ).scalar_one()
         bot.mode = AIMode.DRAFT_ONLY
+        cfg = await get_or_create_ai_config(session, org_id)
+        cfg.enabled = True
+        cfg.response_policy_enabled = True
 
         customer = Customer(organization_id=org_id, name="KB Email", email="kbemail@example.com")
         session.add(customer)
@@ -77,6 +80,7 @@ async def test_email_knowledge_base_sends_when_grounded() -> None:
         ).scalars().all()
         assert len(ai_msgs) == 1
         assert ai_msgs[0].delivery_status is not None
+        bot.mode = AIMode.SUGGEST
         await session.rollback()
 
 
@@ -94,6 +98,7 @@ async def test_email_knowledge_base_soft_refuses_unknown() -> None:
         ).scalar_one()
         bot.mode = AIMode.DRAFT_ONLY
         cfg = await get_or_create_ai_config(session, org_id)
+        cfg.enabled = True
         cfg.response_policy_enabled = True
 
         customer = Customer(organization_id=org_id, name="KB Soft Email", email="kbsoft@example.com")
@@ -132,4 +137,5 @@ async def test_email_knowledge_base_soft_refuses_unknown() -> None:
             )
         ).scalars().all()
         assert len(ai_msgs) == 1
+        bot.mode = AIMode.SUGGEST
         await session.rollback()
