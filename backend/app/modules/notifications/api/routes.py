@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -87,6 +87,28 @@ async def mark_read(
     await db.commit()
     await db.refresh(notification)
     return notification
+
+
+@router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_notification(
+    notification_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_permission(AI_READ)),
+):
+    """Delete a notification the current user owns — only allowed after it has been read."""
+    notification = await db.scalar(
+        select(Notification).where(Notification.id == notification_id, Notification.user_id == user.id)
+    )
+    if notification is None:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    if notification.read_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only read notifications can be deleted",
+        )
+    await db.delete(notification)
+    await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 preferences_router = APIRouter(prefix="/notification-preferences", tags=["notifications"])

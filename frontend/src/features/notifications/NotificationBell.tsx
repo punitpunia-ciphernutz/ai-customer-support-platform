@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "@/services/api/client";
 import { useAuth } from "@/features/auth/AuthContext";
 import { useSupportSocket } from "@/hooks/useSupportSocket";
-import { IconBell, IconEmpty, IconX } from "@/components/ui/icons";
+import { IconBell, IconEmpty, IconTrash, IconX } from "@/components/ui/icons";
 import { formatRelative } from "@/utils/format";
 import { cn } from "@/utils/cn";
 import type { AppNotification } from "@/types";
@@ -202,6 +202,11 @@ export function NotificationBell({
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
+  const deleteNotification = useMutation({
+    mutationFn: (id: string) => api(`/notifications/${id}`, { method: "DELETE" }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
   const items = notifications.data ?? [];
   const unread = items.filter((n) => !n.read_at).length;
 
@@ -279,25 +284,44 @@ export function NotificationBell({
           </div>
         )}
         {items.map((n) => (
-          <button
+          <div
             key={n.id}
-            type="button"
             className={cn("notification-item", !n.read_at && "unread")}
-            onClick={() => openItem(n)}
           >
-            <span className={cn("notification-item-rail", !n.read_at && "active")} aria-hidden />
-            <div className="notification-item-content">
-              <div className="notification-item-title-row">
-                <div className="notification-item-title">{n.title}</div>
-                {!n.read_at && <span className="notification-item-new">New</span>}
+            <button
+              type="button"
+              className="notification-item-main"
+              onClick={() => openItem(n)}
+            >
+              <span className={cn("notification-item-rail", !n.read_at && "active")} aria-hidden />
+              <div className="notification-item-content">
+                <div className="notification-item-title-row">
+                  <div className="notification-item-title">{n.title}</div>
+                  {!n.read_at && <span className="notification-item-new">New</span>}
+                </div>
+                <div className="notification-item-body">{n.body}</div>
+                <div className="notification-item-meta">
+                  <span>{n.event_type.replace(/_/g, " ").toLowerCase()}</span>
+                  <span>{formatRelative(n.created_at)}</span>
+                </div>
               </div>
-              <div className="notification-item-body">{n.body}</div>
-              <div className="notification-item-meta">
-                <span>{n.event_type.replace(/_/g, " ").toLowerCase()}</span>
-                <span>{formatRelative(n.created_at)}</span>
-              </div>
-            </div>
-          </button>
+            </button>
+            {n.read_at && (
+              <button
+                type="button"
+                className="notification-item-delete"
+                aria-label="Delete notification"
+                title="Delete"
+                disabled={deleteNotification.isPending}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteNotification.mutate(n.id);
+                }}
+              >
+                <IconTrash size={14} />
+              </button>
+            )}
+          </div>
         ))}
       </div>
     </div>

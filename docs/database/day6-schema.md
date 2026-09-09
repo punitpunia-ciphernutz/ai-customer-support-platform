@@ -87,6 +87,7 @@ Timer: type FIRST_RESPONSE|RESOLUTION, status RUNNING|PAUSED|COMPLETED|BREACHED.
 ### notifications / notification_preferences
 
 In-app notifications per user. Preferences: per event_type in_app/email/enabled.
+Users may hard-delete their own notifications only after `read_at` is set (`DELETE /notifications/{id}` → 204; unread → 409).
 
 ## Extended tables
 

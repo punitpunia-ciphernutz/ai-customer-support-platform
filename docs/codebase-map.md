@@ -245,7 +245,7 @@ Storage: `infrastructure/storage/local.py` under `STORAGE_ROOT_DIR`. Docker volu
 
 | File | Role |
 |------|------|
-| `api/routes.py` | List, mark read, **read-all**, preferences |
+| `api/routes.py` | List, mark read, **read-all**, delete (read-only), preferences |
 | `application/service.py` | `notify` / `notify_team` / `notify_managers` |
 
 #### Inbox realtime — `modules/inbox/`
@@ -418,7 +418,7 @@ Nav links live in `components/shared/AppShell.tsx`.
 |--------|----------------|----------|
 | `features/auth/` | Login form; `AuthContext` holds user + token | `/auth/login`, `/auth/me`, `/auth/logout` |
 | `features/inbox/` | Agent inbox: Team/Mine filters, thread, reply, assign | `/conversations`, `/messages`, `/users`, `/teams` + WS |
-| `features/notifications/` | Global header notification bell | `/notifications` + WS |
+| `features/notifications/` | Global header notification bell | `/notifications` (list, read, delete read) + WS |
 | `features/customers/` | Create/list customers | `/customers` |
 | `features/conversations/` | Customer-facing web chat | `/public/conversations...` + `/ws/public` |
 | `features/knowledge/` | Sources list, add TEXT/PDF/URL, status, delete | `/knowledge/...` |

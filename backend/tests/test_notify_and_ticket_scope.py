@@ -89,6 +89,41 @@ async def test_notifications_list_and_read_all(api_client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_delete_notification_only_when_read(api_client: AsyncClient) -> None:
+    headers, manager = await _auth_for(RoleName.MANAGER)
+    title = f"Delete me {uuid.uuid4().hex[:8]}"
+
+    async with AsyncSessionLocal() as session:
+        notification = await NotificationService(session).notify(
+            user_id=manager.id,
+            organization_id=manager.organization_id,
+            event_type="MANAGER_ALERT",
+            title=title,
+            body="Can be removed after read",
+        )
+        await session.commit()
+        assert notification is not None
+        notification_id = notification.id
+
+    reject_unread = await api_client.delete(f"/api/v1/notifications/{notification_id}", headers=headers)
+    assert reject_unread.status_code == 409
+
+    marked = await api_client.patch(f"/api/v1/notifications/{notification_id}/read", headers=headers)
+    assert marked.status_code == 200
+    assert marked.json()["read_at"] is not None
+
+    deleted = await api_client.delete(f"/api/v1/notifications/{notification_id}", headers=headers)
+    assert deleted.status_code == 204
+
+    missing = await api_client.delete(f"/api/v1/notifications/{notification_id}", headers=headers)
+    assert missing.status_code == 404
+
+    listed = await api_client.get("/api/v1/notifications", headers=headers)
+    assert listed.status_code == 200
+    assert all(n["id"] != notification_id for n in listed.json())
+
+
+@pytest.mark.asyncio
 async def test_ticket_team_scope_and_acl(api_client: AsyncClient) -> None:
     headers_agent, agent = await _auth_for(RoleName.AGENT, email="jordan.billing@example.com")
     headers_owner, owner = await _auth_for(RoleName.OWNER)
