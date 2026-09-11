@@ -1,7 +1,8 @@
-"""Seed knowledge base with customer policies (refund, cancellation, plans).
+"""Seed knowledge base with customer policies and account FAQs.
 
-Idempotent: wipes all existing knowledge_sources for the default org, then
-creates one TEXT source with three detailed policy documents.
+Idempotent: ensures a TEXT source named "Customer Policies" exists for the
+default org, then upserts policy/FAQ documents by title (re-ingests when
+content changes). Does not delete unrelated knowledge sources.
 
 Usage:
     cd backend && python -m app.scripts.seed_knowledge_policies
@@ -9,7 +10,7 @@ Usage:
 
 from __future__ import annotations
 
-from sqlalchemy import create_engine, delete, select
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -135,11 +136,59 @@ Q: How do I get Enterprise pricing?
 A: Contact sales@example.com or use the in-app chat to request a custom quote.
 """
 
+PASSWORD_RESET_FAQ = """\
+# Password Reset FAQ
+
+## How to Reset Your Password
+1. Go to the login page at https://app.example.com/login.
+2. Click **Forgot Password** below the password field.
+3. Enter the email address on your account and submit.
+4. Check your inbox for an email from noreply@example.com with the subject "Reset your password".
+5. Open the link in the email (valid for 60 minutes) and choose a new password.
+6. Sign in with your email and the new password.
+
+## Password Requirements
+- At least 8 characters.
+- Include at least one letter and one number.
+- Do not reuse your previous password.
+- Spaces at the start or end are trimmed automatically.
+
+## Troubleshooting
+- **No email received:** Wait 5 minutes, check spam/junk, and confirm you used the email on the account. You can request a new link every 2 minutes.
+- **Link expired or already used:** Request a new reset from the Forgot Password page. Each link works once and expires after 60 minutes.
+- **Wrong email:** If you no longer have access to the account email, contact support@example.com with your account ID or company name for identity verification.
+- **Locked out after too many attempts:** Wait 15 minutes, then try again or use Forgot Password.
+
+## Security Tips
+- Never share your password or reset link with anyone, including support agents.
+- Enable two-factor authentication from Settings → Security when available.
+- Change your password immediately if you suspect unauthorized access.
+
+## Frequently Asked Questions
+Q: How do I reset my password?
+A: On the login page, click Forgot Password, enter your account email, open the reset link we send, and set a new password. The link expires in 60 minutes.
+
+Q: Where is the forgot password link?
+A: It is on the login page, directly under the password field, labeled Forgot Password.
+
+Q: My password reset link expired. What should I do?
+A: Request a new link from Forgot Password. Old links stop working after 60 minutes or after they are used once.
+
+Q: Can support reset my password for me?
+A: Support can help verify your identity and guide you through Forgot Password, but we never ask you to send your password by email or chat.
+
+Q: Password reset link expired — can I still sign in?
+A: Not with the old link. Generate a fresh reset email from the login page, then sign in with the new password.
+"""
+
 POLICIES = [
     ("Refund Policy", REFUND_POLICY),
     ("Cancellation Policy", CANCELLATION_POLICY),
     ("Subscription Plans & Changes", SUBSCRIPTION_PLANS_POLICY),
+    ("Password Reset FAQ", PASSWORD_RESET_FAQ),
 ]
+
+SOURCE_NAME = "Customer Policies"
 
 
 def main() -> None:
@@ -149,47 +198,74 @@ def main() -> None:
     with Session(engine) as session:
         org_id = session.execute(select(Organization.id).limit(1)).scalar_one()
 
-        # Wipe all existing knowledge sources (cascade deletes docs + chunks)
-        session.execute(
-            delete(KnowledgeSource).where(KnowledgeSource.organization_id == org_id)
-        )
-        session.flush()
-
-        # Create source
-        source = KnowledgeSource(
-            organization_id=org_id,
-            name="Customer Policies",
-            type=KnowledgeSourceType.TEXT,
-            status=IngestionStatus.PENDING,
-            configuration={},
-        )
-        session.add(source)
-        session.flush()
-
-        # Create documents
-        doc_ids = []
-        for title, content in POLICIES:
-            doc = Document(
-                knowledge_source_id=source.id,
-                title=title,
-                content=content,
-                metadata_={"source_type": "TEXT"},
-                status=IngestionStatus.PENDING,
+        source = session.scalar(
+            select(KnowledgeSource).where(
+                KnowledgeSource.organization_id == org_id,
+                KnowledgeSource.name == SOURCE_NAME,
             )
-            session.add(doc)
+        )
+        if source is None:
+            source = KnowledgeSource(
+                organization_id=org_id,
+                name=SOURCE_NAME,
+                type=KnowledgeSourceType.TEXT,
+                status=IngestionStatus.PENDING,
+                configuration={},
+            )
+            session.add(source)
             session.flush()
-            doc_ids.append(doc.id)
+            print(f"✓ Created source '{source.name}'")
+        else:
+            print(f"✓ Using existing source '{source.name}'")
 
+        pending_ids: list[str] = []
+        for title, content in POLICIES:
+            doc = session.scalar(
+                select(Document).where(
+                    Document.knowledge_source_id == source.id,
+                    Document.title == title,
+                )
+            )
+            if doc is None:
+                doc = Document(
+                    knowledge_source_id=source.id,
+                    title=title,
+                    content=content,
+                    metadata_={"source_type": "TEXT"},
+                    status=IngestionStatus.PENDING,
+                )
+                session.add(doc)
+                session.flush()
+                print(f"  + Added document '{title}'")
+                pending_ids.append(doc.id)
+            elif doc.content != content:
+                doc.content = content
+                doc.content_hash = None
+                doc.status = IngestionStatus.PENDING
+                doc.error_message = None
+                session.flush()
+                print(f"  ~ Updated document '{title}' (pending re-ingest)")
+                pending_ids.append(doc.id)
+            else:
+                print(f"  = Unchanged '{title}'")
+                if doc.status != IngestionStatus.COMPLETED:
+                    pending_ids.append(doc.id)
+
+        source.status = IngestionStatus.PENDING if pending_ids else source.status
         session.commit()
-        print(f"✓ Created source '{source.name}' with {len(doc_ids)} documents")
+
         print(f"  Source ID: {source.id}")
-        for did in doc_ids:
-            print(f"  Document ID: {did}")
+        if not pending_ids:
+            print("Nothing to ingest.")
+            return
+
         print()
-        print("Run Celery worker to ingest: celery -A app.workers.celery_app worker -l info")
-        print("Or trigger manually per doc:")
-        for did in doc_ids:
-            print(f"  python -c \"from app.workers.tasks import ingest_document; ingest_document.delay('{did}')\"")
+        print("Queueing ingestion for pending documents…")
+        from app.workers.tasks import ingest_document
+
+        for did in pending_ids:
+            ingest_document.delay(did)
+            print(f"  Queued ingest_document({did})")
 
 
 if __name__ == "__main__":
