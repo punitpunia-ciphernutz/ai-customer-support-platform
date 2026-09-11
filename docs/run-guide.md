@@ -61,27 +61,7 @@ On backend start: `alembic upgrade head` (through **`0011_chat_widgets`**) + see
 
 Published host ports are **frontend `:5173`** and **backend `:8000` only**. Postgres, Redis, Celery worker, and Beat stay on the Docker network (not bound to the host).
 
-### ngrok demo
-
-Share the UI over the internet without exposing internal services. Full checklist is also in [`.env.example`](../.env.example).
-
-1. Start tunnels to the published ports:
-   ```bash
-   ngrok http 5173   # frontend → https://<frontend>.ngrok-free.app
-   ngrok http 8000   # backend  → https://<backend>.ngrok-free.app
-   ```
-2. In `.env`, point the frontend at the backend tunnel and allow the frontend origin:
-   ```bash
-   VITE_API_BASE_URL=https://<backend>.ngrok-free.app/api/v1
-   VITE_WS_BASE_URL=wss://<backend>.ngrok-free.app/ws
-   CORS_ORIGINS=http://localhost:5173,http://localhost:3000,https://<frontend>.ngrok-free.app
-   FRONTEND_PUBLIC_URL=https://<frontend>.ngrok-free.app
-   ```
-3. Rebuild so Vite bakes in the new API/WS URLs (and restart backend for CORS):
-   ```bash
-   docker compose up --build -d
-   ```
-4. Open the frontend ngrok URL. Use `https` / `wss` (not `http` / `ws`).
+For production-shaped env values, see [`.env.production.example`](../.env.production.example).
 
 ## Embeddable chat widget (demo)
 

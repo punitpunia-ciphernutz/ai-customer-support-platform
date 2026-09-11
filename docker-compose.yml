@@ -1,6 +1,6 @@
 services:
   # Postgres / Redis / worker / beat stay internal-only (no host ports).
-  # Only frontend (:5173) and backend (:8000) are published for local + ngrok demos.
+  # Only frontend (:5173) and backend (:8000) are published.
   postgres:
     image: pgvector/pgvector:pg16
     environment:
@@ -100,7 +100,7 @@ services:
   frontend:
     build:
       context: ./frontend
-      # Baked in at image build time — set in .env (see ngrok section in .env.example).
+      # Baked in at image build time — set in .env.
       # Rebuild after changing: docker compose up --build frontend
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api/v1}
