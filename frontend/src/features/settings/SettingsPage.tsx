@@ -113,7 +113,6 @@ type SettingsDraft = {
   escalation_threshold: number;
   require_knowledge: boolean;
   escalate_if_unknown: boolean;
-  multilingual_enabled: boolean;
   ai_response_timeout_seconds: number;
   llm_model: string;
   allowed_intents: string[] | null;
@@ -139,7 +138,6 @@ function draftFromConfig(config: AIConfig): SettingsDraft {
     escalation_threshold: config.escalation_threshold,
     require_knowledge: config.require_knowledge ?? true,
     escalate_if_unknown: config.escalate_if_unknown ?? true,
-    multilingual_enabled: config.multilingual_enabled ?? true,
     ai_response_timeout_seconds: config.ai_response_timeout_seconds ?? 60,
     llm_model: config.llm_model ?? "gemini-3.1-flash-lite",
     allowed_intents: config.allowed_intents,
@@ -168,7 +166,7 @@ function payloadFromDraft(draft: SettingsDraft): Partial<AIConfig> {
     escalation_threshold: draft.escalation_threshold,
     require_knowledge: draft.require_knowledge,
     escalate_if_unknown: draft.escalate_if_unknown,
-    multilingual_enabled: draft.multilingual_enabled,
+    multilingual_enabled: true,
     ai_response_timeout_seconds: draft.ai_response_timeout_seconds,
     llm_model: draft.llm_model,
     allowed_intents: draft.allowed_intents,
@@ -489,20 +487,6 @@ export function SettingsPage() {
                 </span>
                 <span className="form-hint" style={{ display: "block", marginTop: "0.25rem", paddingLeft: "1.5rem" }}>
                   Hand off when the answer cannot be determined
-                </span>
-              </label>
-              <label style={{ cursor: "pointer", fontSize: "0.875rem" }}>
-                <span className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={draft.multilingual_enabled}
-                    onChange={(e) => updateDraft({ multilingual_enabled: e.target.checked })}
-                    disabled={patchConfig.isPending}
-                  />
-                  Multilingual responses
-                </span>
-                <span className="form-hint" style={{ display: "block", marginTop: "0.25rem", paddingLeft: "1.5rem" }}>
-                  Reply in the customer&apos;s detected language
                 </span>
               </label>
             </div>

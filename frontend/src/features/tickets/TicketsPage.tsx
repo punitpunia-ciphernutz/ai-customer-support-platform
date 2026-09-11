@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -27,7 +27,7 @@ import {
   StatCard,
   TableSearchBar,
 } from "@/components/ui";
-import { IconChevronLeft, IconPlus, IconTicket } from "@/components/ui/icons";
+import { IconChevronLeft, IconInfo, IconPlus, IconTicket } from "@/components/ui/icons";
 import { TagChips, TagEditor, TagFilterDropdown } from "@/components/tags/TagEditor";
 import { cn } from "@/utils/cn";
 import {
@@ -38,6 +38,68 @@ import {
 
 type StatusFilter = "all" | TicketStatus;
 type TicketView = "team" | "mine" | "unassigned" | "all";
+
+const TICKET_STATUS_HELP: { status: TicketStatus; label: string; meaning: string }[] = [
+  { status: "OPEN", label: "Open", meaning: "Awaiting initial action" },
+  { status: "IN_PROGRESS", label: "In Progress", meaning: "Being worked on by an agent" },
+  { status: "WAITING", label: "Waiting", meaning: "Blocked or waiting on customer / third party" },
+  { status: "RESOLVED", label: "Resolved", meaning: "Issue has been addressed" },
+  { status: "CLOSED", label: "Closed", meaning: "Ticket finalized and archived" },
+];
+
+function TicketStatusInfo() {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="th-info" ref={rootRef}>
+      <button
+        type="button"
+        className={cn("th-info-btn", open && "is-open")}
+        aria-label="Ticket status meanings"
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <IconInfo size={14} aria-hidden />
+      </button>
+      {open && (
+        <div className="th-info-popover" role="dialog" aria-label="Ticket status meanings">
+          <p className="th-info-title">Ticket statuses</p>
+          <ul className="th-info-list">
+            {TICKET_STATUS_HELP.map((item) => (
+              <li key={item.status}>
+                <span className={statusClass(item.status.toLowerCase())}>{item.label}</span>
+                <span className="th-info-meaning">{item.meaning}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function TicketsPage() {
   const { user } = useAuth();
@@ -369,7 +431,12 @@ export function TicketsPage() {
                 <thead>
                   <tr>
                     <th>Customer</th>
-                    <th>Status</th>
+                    <th>
+                      <span className="th-label-with-info">
+                        Status
+                        <TicketStatusInfo />
+                      </span>
+                    </th>
                     <th>Priority</th>
                     <th>Tags</th>
                     <th>Team</th>
