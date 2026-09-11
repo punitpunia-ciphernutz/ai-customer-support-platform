@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.modules.ai.domain.models import AIMode, AIRunStatus, AIRunType, EvaluationBehavior, SentimentLabel
+from app.modules.ai.domain.models import AIMode, AIRunStatus, AIRunType, SentimentLabel
 
 
 class AIRunInput(BaseModel):
@@ -164,38 +164,6 @@ class AIHandoffPackage(BaseModel):
     recommended_action: str
     sentiment: str | None = None
     language: str | None = None
-
-
-class EvaluationCase(BaseModel):
-    input: str
-    expected_intent: IntentLabel | None = None
-    expected_behavior: EvaluationBehavior
-    expected_answer_contains: list[str] = Field(default_factory=list)
-    expected_escalation: bool = False
-    knowledge_documents: list[str] = Field(default_factory=list)
-    category: str = "FAQ"
-
-
-class EvaluationCaseResult(BaseModel):
-    case_index: int
-    input: str
-    passed: bool
-    expected: dict[str, Any]
-    actual: dict[str, Any]
-    scores: dict[str, float] = Field(default_factory=dict)
-
-
-class EvaluationReport(BaseModel):
-    evaluation_id: str
-    name: str
-    total_cases: int
-    passed_cases: int
-    failed_cases: int
-    intent_accuracy: float
-    grounding_rate: float
-    escalation_accuracy: float
-    answer_quality: float
-    results: list[EvaluationCaseResult] = Field(default_factory=list)
 
 
 class BotConfigurationOut(BaseModel):

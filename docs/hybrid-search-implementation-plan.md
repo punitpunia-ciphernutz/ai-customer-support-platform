@@ -459,7 +459,7 @@ When org override exists, resolve `retrieval_mode` like other AI fields. Channel
 
 ### Methodology
 
-1. Build a labeled eval set (reuse `ai_evaluations` if useful) with semantic, keyword/code, and distractor cases.  
+1. Build a labeled eval set (fixtures / golden queries) with semantic, keyword/code, and distractor cases.  
 2. Run **shadow comparisons**: same query → legacy vs hybrid_rrf; log rank diffs without serving RRF.  
 3. Scale tests: synthetic N ∈ {1k, 10k, 100k+} chunks; measure exact vs HNSW latency and recall vs exact ground truth.  
 4. Tune `ef_search`, `ai_vector_candidate_k`, `ai_rrf_candidate_k` before production default flip.  

@@ -268,22 +268,6 @@ PY
 
 Expect: `min_relevance_score`, `require_knowledge`, `multilingual_enabled`, `mode_display`, `channel_overrides`.
 
-### Evaluation suite (25 cases)
-
-Via UI: **Settings → Run evaluation suite**
-
-Or API:
-
-```bash
-docker compose exec -T backend python - <<'PY'
-import httpx
-base = "http://localhost:8000/api/v1"
-token = httpx.post(f"{base}/auth/login", json={"email":"agent@example.com","password":"agent123!"}).json()["access_token"]
-h = {"Authorization": f"Bearer {token}"}
-print(httpx.post(f"{base}/ai/evaluations/run", headers=h).json())
-PY
-```
-
 ### Takeover
 
 ```bash

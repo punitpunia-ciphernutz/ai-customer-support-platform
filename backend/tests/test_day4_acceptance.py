@@ -7,9 +7,7 @@ from sqlalchemy import select
 
 from app.infrastructure.database.models import AIControlMode, Organization
 from app.infrastructure.database.session import AsyncSessionLocal
-from app.modules.ai.application.evaluation_service import EVALUATION_CASES, EvaluationService
 from app.modules.ai.application.grounding_validator import GroundingValidator
-from app.modules.ai.domain.schemas import AgentDecision, RetrievedDocument
 from app.modules.ai.infrastructure.llm.providers import EchoLLMProvider
 from app.modules.conversations.service import ConversationService
 
@@ -40,18 +38,4 @@ async def test_takeover_blocks_ai_control_mode() -> None:
         assert updated.ai_control_mode == AIControlMode.HUMAN_CONTROL
         restored = await ConversationService(session).return_to_ai(user, conv.id)
         assert restored.ai_control_mode == AIControlMode.AI_CONTROL
-        await session.rollback()
-
-
-def test_evaluation_case_count() -> None:
-    assert len(EVALUATION_CASES) >= 20
-
-
-@pytest.mark.asyncio
-async def test_evaluation_suite_runs_offline() -> None:
-    async with AsyncSessionLocal() as session:
-        org_id = (await session.execute(select(Organization.id).limit(1))).scalar_one()
-        report = await EvaluationService(session).run_suite(org_id)
-        assert report.total_cases >= 20
-        assert report.intent_accuracy >= 0
         await session.rollback()

@@ -25,7 +25,6 @@ from app.infrastructure.database.models import (
 from app.modules.ai.domain.models import (
     AgentAvailability,
     AgentStatus,
-    AIEvaluation,
     AIConfig,
     AIMode,
     BotConfiguration,
@@ -341,28 +340,6 @@ def seed() -> None:
                 )
 
         _seed_prompts(session)
-
-        evaluation = session.scalar(
-            select(AIEvaluation).where(
-                AIEvaluation.organization_id == org.id,
-                AIEvaluation.name == "Day 4 Baseline",
-            )
-        )
-        from app.modules.ai.application.evaluation_service import EVALUATION_CASES
-
-        if evaluation is None:
-            session.add(
-                AIEvaluation(
-                    organization_id=org.id,
-                    name="Day 4 Baseline",
-                    version=1,
-                    case_count=len(EVALUATION_CASES),
-                    cases=EVALUATION_CASES,
-                )
-            )
-        else:
-            evaluation.case_count = len(EVALUATION_CASES)
-            evaluation.cases = EVALUATION_CASES
 
         for channel in ChannelType:
             ch_cfg = session.scalar(

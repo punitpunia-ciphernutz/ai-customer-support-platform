@@ -7,7 +7,6 @@ from app.infrastructure.database.models import User
 from app.infrastructure.database.session import get_db
 from app.modules.ai.application.ai_config_service import get_or_create_ai_config, update_ai_config
 from app.modules.ai.application.ai_service import AIService
-from app.modules.ai.application.evaluation_service import EvaluationService
 from app.modules.ai.domain.models import AI_MODE_DISPLAY, AIRun, BotConfiguration
 from app.modules.ai.domain.schemas import (
     AIConfigOut,
@@ -20,7 +19,6 @@ from app.modules.ai.domain.schemas import (
     BotConfigurationOut,
     ClassifyRequest,
     ClassifyResponse,
-    EvaluationReport,
     LLMModelOption,
 )
 from app.modules.ai.infrastructure.llm.providers import available_llm_model_options
@@ -150,22 +148,3 @@ async def patch_ai_config(
 ) -> AIConfigOut:
     await update_ai_config(db, user.organization_id, body)
     return await _config_out(db, user.organization_id)
-
-
-@router.get("/evaluations")
-async def list_evaluations(
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_permission(AI_READ)),
-):
-    ev = await EvaluationService(db).get_or_create_evaluation(user.organization_id)
-    return {"id": ev.id, "name": ev.name, "case_count": ev.case_count, "version": ev.version}
-
-
-@router.post("/evaluations/run", response_model=EvaluationReport)
-async def run_evaluations(
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(require_permission(AI_WRITE)),
-) -> EvaluationReport:
-    report = await EvaluationService(db).run_suite(user.organization_id)
-    await db.commit()
-    return report

@@ -550,12 +550,6 @@ export function SettingsPage() {
         )}
       </section>
 
-      <section className="card mb-6">
-        <h2 className="section-title">AI Evaluation</h2>
-        <p className="form-hint mb-4">Run the Day 4 baseline suite (25 cases, offline Echo LLM in dev).</p>
-        <EvalRunButton />
-      </section>
-
       {draft && (
         <section className="card mb-6">
           <h2 className="section-title">Intent Configuration</h2>
@@ -810,42 +804,6 @@ export function SettingsPage() {
           )}
         </div>
       </section>
-    </div>
-  );
-}
-
-function EvalRunButton() {
-  const [result, setResult] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const run = async () => {
-    setLoading(true);
-    setErr(null);
-    try {
-      const report = await api<{
-        passed_cases: number;
-        total_cases: number;
-        intent_accuracy: number;
-        escalation_accuracy: number;
-      }>("/ai/evaluations/run", { method: "POST" });
-      setResult(
-        `Passed ${report.passed_cases}/${report.total_cases} · Intent ${Math.round(report.intent_accuracy * 100)}% · Escalation ${Math.round(report.escalation_accuracy * 100)}%`
-      );
-    } catch (e) {
-      setErr(e instanceof ApiError ? e.message : "Evaluation failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div>
-      <button type="button" className="btn btn-primary btn-sm" onClick={() => void run()} disabled={loading}>
-        {loading ? "Running…" : "Run evaluation suite"}
-      </button>
-      {result && <Alert type="success">{result}</Alert>}
-      {err && <Alert type="error">{err}</Alert>}
     </div>
   );
 }

@@ -4,24 +4,22 @@ from sqlalchemy import create_engine, inspect, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.infrastructure.database.models import AIControlMode, Conversation, TicketSource
+from app.infrastructure.database.models import AIControlMode, TicketSource
 from app.modules.ai.domain.models import (
     AIConfig,
-    AIEvaluation,
     BotConfiguration,
     Prompt,
     PromptVersion,
 )
-from app.modules.ai.domain.schemas import AgentDecision
 from app.modules.ai.domain.schemas import (
+    AgentDecision,
     AIHandoffPackage,
     AIRunTraceStep,
     ConfidenceBreakdown,
     ConfidenceComponents,
-    EvaluationCase,
     GroundingResult,
 )
-from app.modules.ai.domain.models import AI_MODE_DISPLAY, AIMode, EvaluationBehavior
+from app.modules.ai.domain.models import AI_MODE_DISPLAY, AIMode
 
 
 def test_day4_schemas_instantiate() -> None:
@@ -52,13 +50,6 @@ def test_day4_schemas_instantiate() -> None:
     step = AIRunTraceStep(name="retrieve_knowledge", status="completed", duration_ms=120)
     assert step.duration_ms == 120
 
-    case = EvaluationCase(
-        input="How do I reset my password?",
-        expected_behavior=EvaluationBehavior.ANSWER,
-        category="FAQ",
-    )
-    assert case.expected_behavior == EvaluationBehavior.ANSWER
-
 
 def test_ai_mode_display_mapping() -> None:
     assert AI_MODE_DISPLAY[AIMode.DRAFT_ONLY] == "KNOWLEDGE_BASE"
@@ -75,11 +66,11 @@ def test_day4_migration_tables_exist() -> None:
         "prompts",
         "prompt_versions",
         "bot_configurations",
-        "ai_evaluations",
-        "ai_evaluation_results",
         "agent_availability",
     ):
         assert table in tables, f"Missing table {table}"
+    assert "ai_evaluations" not in tables
+    assert "ai_evaluation_results" not in tables
 
     conv_cols = {c["name"] for c in inspector.get_columns("conversations")}
     assert "ai_control_mode" in conv_cols
@@ -95,7 +86,7 @@ def test_day4_migration_tables_exist() -> None:
     assert "prompt_version" in run_cols
 
 
-def test_seed_prompts_and_evaluation() -> None:
+def test_seed_prompts_and_ai_config() -> None:
     settings = get_settings()
     engine = create_engine(settings.database_url_sync)
     with Session(engine) as session:
@@ -106,10 +97,6 @@ def test_seed_prompts_and_evaluation() -> None:
         )
         assert version is not None
         assert "support agent" in version.template.lower()
-
-        evaluation = session.scalar(select(AIEvaluation).where(AIEvaluation.name == "Day 4 Baseline"))
-        assert evaluation is not None
-        assert evaluation.case_count >= 1
 
         config = session.scalar(select(AIConfig))
         assert config is not None

@@ -26,15 +26,6 @@ Per-channel overrides for bot mode and thresholds.
 | `organization_id` + `channel` | unique | e.g. `WEB_CHAT`, `EMAIL` |
 | `mode` | ai_mode enum | Overrides org default |
 
-### `ai_evaluations` / `ai_evaluation_results`
-
-Evaluation datasets and per-case run results.
-
-| Column | Type | Notes |
-|--------|------|-------|
-| `ai_evaluations.cases` | JSONB | Array of evaluation case definitions |
-| `ai_evaluation_results.passed` | bool | Expected vs actual match |
-
 ### `agent_availability`
 
 Agent online status and schedule for routing.
@@ -44,6 +35,8 @@ Agent online status and schedule for routing.
 | `user_id` | FK users | One row per agent |
 | `is_online` | bool | Manual or heartbeat |
 | `schedule` | JSONB | Weekly hours |
+
+> Removed in `0015_drop_ai_evaluations`: `ai_evaluations` / `ai_evaluation_results` (Day 4 eval harness).
 
 ## Extended tables
 
@@ -115,7 +108,6 @@ Migration `0010_response_policy` adds the Response Policy columns (defaults abov
 Organization
 ├── ai_configs (1:1)
 ├── bot_configurations (1:N)
-├── ai_evaluations (1:N)
 └── agent_availability (1:N via users)
 
 Conversation
@@ -124,8 +116,7 @@ Conversation
 └── tickets (source, customer_id, title, description)
 
 AIRun
-├── prompt_version → prompts
-└── ai_evaluation_results (optional FK)
+└── prompt_version → prompts
 ```
 
 ## Important queries

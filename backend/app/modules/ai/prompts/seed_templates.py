@@ -46,22 +46,3 @@ Answer:
 
 Respond with JSON: {"grounded": <bool>, "score": <0.0-1.0>, "unsupported_claims": [<string>]}
 """
-
-EVALUATION_STUB_CASES = [
-    {
-        "input": "How do I reset my password?",
-        "expected_intent": "ACCOUNT_ACCESS",
-        "expected_behavior": "ANSWER",
-        "expected_answer_contains": ["password"],
-        "expected_escalation": False,
-        "knowledge_documents": ["Password Reset Guide"],
-        "category": "FAQ",
-    },
-    {
-        "input": "Can you change my billing plan?",
-        "expected_intent": "BILLING",
-        "expected_behavior": "ESCALATE",
-        "expected_escalation": True,
-        "category": "Billing",
-    },
-]

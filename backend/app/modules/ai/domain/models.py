@@ -1,4 +1,4 @@
-"""AI run persistence, configuration, prompts, evaluation, and structured schemas."""
+"""AI run persistence, configuration, prompts, and structured schemas."""
 
 from datetime import datetime
 from enum import StrEnum
@@ -54,12 +54,6 @@ class AgentStatus(StrEnum):
     ONLINE = "ONLINE"
     AWAY = "AWAY"
     OFFLINE = "OFFLINE"
-
-
-class EvaluationBehavior(StrEnum):
-    ANSWER = "ANSWER"
-    ESCALATE = "ESCALATE"
-    SUGGEST = "SUGGEST"
 
 
 # Day 4 display labels for API/UI
@@ -200,33 +194,6 @@ class BotConfiguration(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-
-
-class AIEvaluation(Base):
-    __tablename__ = "ai_evaluations"
-
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
-    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    case_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    cases: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-
-class AIEvaluationResult(Base):
-    __tablename__ = "ai_evaluation_results"
-
-    id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
-    evaluation_id: Mapped[str] = mapped_column(ForeignKey("ai_evaluations.id"), nullable=False, index=True)
-    ai_run_id: Mapped[str | None] = mapped_column(ForeignKey("ai_runs.id"), index=True)
-    case_index: Mapped[int] = mapped_column(Integer, nullable=False)
-    input_message: Mapped[str] = mapped_column(Text, nullable=False)
-    expected: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-    actual: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
-    passed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    scores: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class AgentAvailability(Base):

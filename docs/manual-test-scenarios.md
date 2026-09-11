@@ -800,16 +800,7 @@ Cycle ONLINE → AWAY → OFFLINE in UI.
 - [ ] Disabled channel rejects or blocks intake
 - [ ] FORM remains offline in demo
 
-### TC-CH-02 — AI evaluation suite
-
-**Steps**
-1. Settings → **Run evaluation suite**
-2. Or: `POST /ai/evaluations/run` with Bearer token
-
-**Expect**
-- [ ] Suite runs and returns case results (pass/fail summary)
-
-### TC-CH-03 — Business hours
+### TC-CH-02 — Business hours
 
 **Steps**
 1. `/settings/business-hours` → view schedule / holidays
