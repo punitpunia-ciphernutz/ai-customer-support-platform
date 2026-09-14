@@ -4,7 +4,6 @@ import { LoginPage } from "@/features/auth/LoginPage";
 import { AutomationFormPage } from "@/features/automations/AutomationFormPage";
 import { AutomationsPage } from "@/features/automations/AutomationsPage";
 import { AutomationDetailPage } from "@/features/automations/AutomationDetailPage";
-import { BusinessHoursPage } from "@/features/settings/BusinessHoursPage";
 import { CustomerDetailPage } from "@/features/customers/CustomerDetailPage";
 import { CustomersPage } from "@/features/customers/CustomersPage";
 import { WebChatPage } from "@/features/conversations/WebChatPage";
@@ -68,7 +67,8 @@ export function AppRouter() {
                 <Route path="/tickets" element={<TicketsPage />} />
                 <Route path="/teams" element={<TeamsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/settings/business-hours" element={<BusinessHoursPage />} />
+                {/* Restore BusinessHoursPage when business hours is enabled again. */}
+                <Route path="/settings/business-hours" element={<Navigate to="/settings" replace />} />
                 <Route path="/settings/channels" element={<ChannelSettingsPage />} />
                 <Route path="/settings/widgets" element={<WidgetsPage />} />
                 <Route path="/settings/widgets/:widgetId" element={<WidgetDetailPage />} />

@@ -3,7 +3,8 @@ import { cn } from "@/utils/cn";
 
 const LINKS = [
   { to: "/settings", label: "AI Support", exact: true },
-  { to: "/settings/business-hours", label: "Business Hours" },
+  // Restore when business hours is enabled again:
+  // { to: "/settings/business-hours", label: "Business Hours" },
   { to: "/settings/channels", label: "Channels" },
   { to: "/settings/widgets", label: "Chat Widgets" },
 ];
