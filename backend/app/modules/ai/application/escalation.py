@@ -38,6 +38,16 @@ def detect_human_request(message: str) -> bool:
     return any(re.search(p, lower) for p in HUMAN_REQUEST_PATTERNS)
 
 
+def effective_confidence_threshold(auto_reply_threshold: float, escalation_threshold: float) -> float:
+    """One send/escalate bar from the two stored settings.
+
+    Older configs can have different values. The higher one is the bar that
+    already decided the outcome, so treating them as one threshold does not
+    change who gets an auto-reply versus a human handoff.
+    """
+    return max(float(auto_reply_threshold), float(escalation_threshold))
+
+
 def evaluate_escalation(state: SupportAgentState, config: EscalationConfig) -> SupportAgentState:
     # Response Policy soft path — do not apply OTHER/retrieval escalate reasons
     if state.policy_allows_ungrounded_send and state.policy_action in _SOFT_POLICY_ACTIONS:
@@ -77,9 +87,12 @@ def evaluate_escalation(state: SupportAgentState, config: EscalationConfig) -> S
     if not state.grounded and state.knowledge_available:
         reasons.append("Answer failed grounding validation")
 
-    if state.support_confidence < config.escalation_threshold:
+    confidence_threshold = effective_confidence_threshold(
+        config.auto_reply_threshold, config.escalation_threshold
+    )
+    if state.support_confidence < confidence_threshold:
         reasons.append(
-            f"Support confidence {state.support_confidence:.2f} below threshold {config.escalation_threshold:.2f}"
+            f"Support confidence {state.support_confidence:.2f} below threshold {confidence_threshold:.2f}"
         )
 
     reasons = list(dict.fromkeys(reasons))  # dedupe preserve order
@@ -94,7 +107,7 @@ def evaluate_escalation(state: SupportAgentState, config: EscalationConfig) -> S
         state.escalation_required = True
         state.escalation_reason = "; ".join(reasons)
         state.decision = AgentDecision.ESCALATE
-    elif state.support_confidence >= config.auto_reply_threshold and state.grounded:
+    elif state.support_confidence >= confidence_threshold and state.grounded:
         state.escalation_required = False
         state.decision = AgentDecision.AI_RESOLVE
     else:

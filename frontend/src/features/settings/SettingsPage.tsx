@@ -176,12 +176,20 @@ function emptyTeamMap(): Record<string, string> {
   return Object.fromEntries(INTENT_LABELS.map((intent) => [intent, ""]));
 }
 
+function mergedConfidenceThreshold(autoReply: number, escalation: number): number {
+  return Math.max(autoReply, escalation);
+}
+
 function draftFromConfig(config: AIConfig): SettingsDraft {
+  const confidenceThreshold = mergedConfidenceThreshold(
+    config.auto_reply_threshold,
+    config.escalation_threshold,
+  );
   return {
     enabled: config.enabled,
     mode: config.mode,
-    auto_reply_threshold: config.auto_reply_threshold,
-    escalation_threshold: config.escalation_threshold,
+    auto_reply_threshold: confidenceThreshold,
+    escalation_threshold: confidenceThreshold,
     require_knowledge: config.require_knowledge ?? true,
     escalate_if_unknown: config.escalate_if_unknown ?? true,
     ai_response_timeout_seconds: config.ai_response_timeout_seconds ?? 60,
@@ -205,11 +213,15 @@ function payloadFromDraft(draft: SettingsDraft): Partial<AIConfig> {
   for (const [intent, teamName] of Object.entries(draft.intent_team_map)) {
     if (teamName.trim()) intent_team_map[intent] = teamName.trim();
   }
+  const confidenceThreshold = mergedConfidenceThreshold(
+    draft.auto_reply_threshold,
+    draft.escalation_threshold,
+  );
   return {
     enabled: draft.enabled,
     mode: draft.mode,
-    auto_reply_threshold: draft.auto_reply_threshold,
-    escalation_threshold: draft.escalation_threshold,
+    auto_reply_threshold: confidenceThreshold,
+    escalation_threshold: confidenceThreshold,
     require_knowledge: draft.require_knowledge,
     escalate_if_unknown: draft.escalate_if_unknown,
     multilingual_enabled: true,
@@ -453,53 +465,34 @@ export function SettingsPage() {
 
             <div className="ai-core-divider" aria-hidden />
 
-            <div className="ai-grid-2 ai-core-row">
-              <div className="ai-slider-field">
-                <label className="form-label" htmlFor="auto-threshold">
-                  Auto-reply Threshold
-                </label>
-                <div className="ai-slider-inline">
-                  <input
-                    id="auto-threshold"
-                    className="ai-range"
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={draft.auto_reply_threshold}
-                    onChange={(e) =>
-                      updateDraft({ auto_reply_threshold: parseFloat(e.target.value) })
-                    }
-                    disabled={patchConfig.isPending}
-                    style={rangeFillStyle(draft.auto_reply_threshold * 100)}
-                  />
-                  <span className="ai-value-badge">{formatPercent(draft.auto_reply_threshold)}</span>
-                </div>
-                <span className="form-hint">Minimum confidence to auto-reply (0–1).</span>
+            <div className="ai-slider-field ai-core-row">
+              <label className="form-label" htmlFor="confidence-threshold">
+                Confidence Threshold
+              </label>
+              <div className="ai-slider-inline">
+                <input
+                  id="confidence-threshold"
+                  className="ai-range"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={draft.auto_reply_threshold}
+                  onChange={(e) => {
+                    const confidenceThreshold = parseFloat(e.target.value);
+                    updateDraft({
+                      auto_reply_threshold: confidenceThreshold,
+                      escalation_threshold: confidenceThreshold,
+                    });
+                  }}
+                  disabled={patchConfig.isPending}
+                  style={rangeFillStyle(draft.auto_reply_threshold * 100)}
+                />
+                <span className="ai-value-badge">{formatPercent(draft.auto_reply_threshold)}</span>
               </div>
-              <div className="ai-slider-field">
-                <label className="form-label" htmlFor="esc-threshold">
-                  Escalation Threshold
-                </label>
-                <div className="ai-slider-inline">
-                  <input
-                    id="esc-threshold"
-                    className="ai-range"
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={draft.escalation_threshold}
-                    onChange={(e) =>
-                      updateDraft({ escalation_threshold: parseFloat(e.target.value) })
-                    }
-                    disabled={patchConfig.isPending}
-                    style={rangeFillStyle(draft.escalation_threshold * 100)}
-                  />
-                  <span className="ai-value-badge">{formatPercent(draft.escalation_threshold)}</span>
-                </div>
-                <span className="form-hint">Below this confidence, escalate to human (0–1).</span>
-              </div>
+              <span className="form-hint">
+                Auto-reply at or above this when grounded. Below it, escalate to a human.
+              </span>
             </div>
 
             <div className="ai-grid-2 ai-core-row ai-core-checks">

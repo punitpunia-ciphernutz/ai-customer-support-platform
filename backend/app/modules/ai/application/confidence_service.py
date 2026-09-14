@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from app.modules.ai.application.escalation import effective_confidence_threshold
 from app.modules.ai.domain.schemas import AgentDecision, ConfidenceBreakdown, ConfidenceComponents, SupportAgentState
 
 
@@ -81,8 +82,10 @@ def calculate_confidence_breakdown(
     final = round(min(1.0, max(0.0, final)), 4)
 
     reasons: list[str] = []
-    threshold = config.escalation_threshold if config else 0.85
-    auto_threshold = config.auto_reply_threshold if config else 0.85
+    auto_threshold = effective_confidence_threshold(
+        config.auto_reply_threshold if config else 0.85,
+        config.escalation_threshold if config else 0.85,
+    )
 
     if state.policy_allows_ungrounded_send:
         # Soft replies intentionally skip KB grounding — don't flag as escalate reasons
